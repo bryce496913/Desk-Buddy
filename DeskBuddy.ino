@@ -73,15 +73,27 @@ float lerpf(float a, float b, float t) {
 }
 
 // =========================
-// Buddy state
+// Buddy behavior state
 // =========================
-enum BuddyMode {
-  MODE_IDLE,
-  MODE_REACT,
-  MODE_SLEEP
+enum class BuddyCoreState : uint8_t {
+  Awake,
+  Sleeping
 };
 
-BuddyMode mode = MODE_IDLE;
+enum class BuddyEvent : uint8_t {
+  Touch,
+  SoundDetected,
+  Wake,
+  SleepRequested
+};
+
+enum class BuddyReaction : uint8_t {
+  Idle,
+  Generic
+};
+
+BuddyCoreState coreState = BuddyCoreState::Awake;
+BuddyReaction activeReaction = BuddyReaction::Idle;
 
 // Eye layout
 int leftEyeX  = 86;
@@ -226,13 +238,11 @@ void scheduleNextDrowsy(uint32_t now) {
 }
 
 // =========================
-// Mode changes
+// Behavior engine
 // =========================
-void triggerReaction(uint32_t now) {
-  if (mode == MODE_SLEEP) return;
-
+void startGenericReaction(uint32_t now) {
   stopReactionSound();
-  mode = MODE_REACT;
+  activeReaction = BuddyReaction::Generic;
   reactUntil = now + 1800;
   reactStep = 0;
   nextReactNoteAt = now;
@@ -241,24 +251,41 @@ void triggerReaction(uint32_t now) {
   drowsyUntil = 0;
 }
 
-void toggleSleep(uint32_t now) {
-  if (mode == MODE_SLEEP) {
-    mode = MODE_IDLE;
-    backlightTarget = 255;
-    blinkActive = true;
-    blinkStart = now;
-    blinkDuration = 260;
-    scheduleNextBlink(now);
-    scheduleNextLook(now);
-    scheduleNextDrowsy(now);
-    playWakeSound();
-  } else {
-    mode = MODE_SLEEP;
-    backlightTarget = 40;
-    blinkActive = false;
-    reactUntil = 0;
-    stopReactionSound();
-    playSleepSound();
+void enterSleep(uint32_t now) {
+  coreState = BuddyCoreState::Sleeping;
+  activeReaction = BuddyReaction::Idle;
+  backlightTarget = 40;
+  blinkActive = false;
+  reactUntil = 0;
+  stopReactionSound();
+  playSleepSound();
+}
+
+void wakeBuddy(uint32_t now) {
+  coreState = BuddyCoreState::Awake;
+  activeReaction = BuddyReaction::Idle;
+  backlightTarget = 255;
+  blinkActive = true;
+  blinkStart = now;
+  blinkDuration = 260;
+  scheduleNextBlink(now);
+  scheduleNextLook(now);
+  scheduleNextDrowsy(now);
+  playWakeSound();
+}
+
+void processBuddyEvent(BuddyEvent event, uint32_t now) {
+  switch (event) {
+    case BuddyEvent::SleepRequested:
+      if (coreState == BuddyCoreState::Awake) enterSleep(now);
+      break;
+    case BuddyEvent::Wake:
+      if (coreState == BuddyCoreState::Sleeping) wakeBuddy(now);
+      break;
+    case BuddyEvent::Touch:
+    case BuddyEvent::SoundDetected:
+      if (coreState == BuddyCoreState::Awake) startGenericReaction(now);
+      break;
   }
 }
 
@@ -276,7 +303,7 @@ void updateInputs(uint32_t now) {
   if ((now - touchDebounceAt) > 25 && rawTouch != touchStable) {
     touchStable = rawTouch;
     if (touchStable) {
-      triggerReaction(now);
+      processBuddyEvent(BuddyEvent::Touch, now);
     }
   }
 
@@ -290,7 +317,9 @@ void updateInputs(uint32_t now) {
   if ((now - buttonDebounceAt) > 25 && rawButton != buttonStable) {
     buttonStable = rawButton;
     if (buttonStable == LOW) {
-      toggleSleep(now);
+      BuddyEvent event = (coreState == BuddyCoreState::Sleeping)
+          ? BuddyEvent::Wake : BuddyEvent::SleepRequested;
+      processBuddyEvent(event, now);
     }
   }
 }
@@ -312,7 +341,7 @@ void updateMicrophoneNoiseFloor(uint16_t amplitude, bool calibrating) {
 }
 
 bool reactionBuzzerIsPlaying() {
-  return mode == MODE_REACT && reactStep < REACT_COUNT;
+  return activeReaction == BuddyReaction::Generic && reactStep < REACT_COUNT;
 }
 
 void processMicrophoneDetectionWindow(uint32_t now, uint16_t amplitude) {
@@ -320,7 +349,7 @@ void processMicrophoneDetectionWindow(uint32_t now, uint16_t amplitude) {
   bool calibrating = (now - micCalibrationStartedAt) < MIC_CALIBRATION_MS;
 
   // Do not teach the ambient floor the Buddy's own reaction sound.
-  if (calibrating || mode != MODE_REACT) {
+  if (calibrating || activeReaction != BuddyReaction::Generic) {
     updateMicrophoneNoiseFloor(amplitude, calibrating);
   }
 
@@ -329,12 +358,13 @@ void processMicrophoneDetectionWindow(uint32_t now, uint16_t amplitude) {
       micAmbientAmplitude * MIC_AMBIENT_MULTIPLIER + MIC_AMBIENT_MARGIN);
 
   bool cooldownFinished = (int32_t)(now - micCooldownUntil) >= 0;
-  bool mayTrigger = !calibrating && mode == MODE_IDLE &&
+  bool mayTrigger = !calibrating && coreState == BuddyCoreState::Awake &&
+                    activeReaction == BuddyReaction::Idle &&
                     !reactionBuzzerIsPlaying() && cooldownFinished;
   if (mayTrigger && amplitude >= latestMicDetectionThreshold) {
     micEventSinceLastReport = true;
     micCooldownUntil = now + MIC_EVENT_COOLDOWN_MS;
-    triggerReaction(now);
+    processBuddyEvent(BuddyEvent::SoundDetected, now);
   }
 }
 
@@ -423,7 +453,7 @@ void updateBacklight() {
 // Sound updater
 // =========================
 void updateSound(uint32_t now) {
-  if (mode != MODE_REACT) {
+  if (activeReaction != BuddyReaction::Generic) {
     if (reactNotePlaying) stopReactionSound();
     return;
   }
@@ -449,21 +479,23 @@ void updateSound(uint32_t now) {
 // Animation
 // =========================
 void updateAnimation(uint32_t now) {
-  if (mode == MODE_REACT && now >= reactUntil) {
-    mode = MODE_IDLE;
+  if (activeReaction == BuddyReaction::Generic && now >= reactUntil) {
+    activeReaction = BuddyReaction::Idle;
     scheduleNextBlink(now);
     scheduleNextLook(now);
     scheduleNextDrowsy(now);
   }
 
-  if (mode == MODE_IDLE && !blinkActive && now >= nextBlinkAt) {
+  if (coreState == BuddyCoreState::Awake &&
+      activeReaction == BuddyReaction::Idle && !blinkActive && now >= nextBlinkAt) {
     blinkActive = true;
     blinkStart = now;
     blinkDuration = random(140, 220);
     scheduleNextBlink(now + blinkDuration);
   }
 
-  if (mode == MODE_IDLE && now >= nextDrowsyAt) {
+  if (coreState == BuddyCoreState::Awake &&
+      activeReaction == BuddyReaction::Idle && now >= nextDrowsyAt) {
     drowsyUntil = now + random(1300, 2800);
     scheduleNextDrowsy(now);
   }
@@ -479,14 +511,15 @@ void updateAnimation(uint32_t now) {
   }
 
   float sleepyAmt = 0.0f;
-  if (mode == MODE_IDLE && now < drowsyUntil) {
+  if (coreState == BuddyCoreState::Awake &&
+      activeReaction == BuddyReaction::Idle && now < drowsyUntil) {
     sleepyAmt = 0.25f + 0.08f * (0.5f + 0.5f * sinf(now * 0.004f));
   }
 
   float targetLid = 0.0f;
-  if (mode == MODE_SLEEP) {
+  if (coreState == BuddyCoreState::Sleeping) {
     targetLid = 1.0f;
-  } else if (mode == MODE_REACT) {
+  } else if (activeReaction == BuddyReaction::Generic) {
     targetLid = 0.0f;
   } else {
     targetLid = max(blinkAmt, sleepyAmt);
@@ -494,10 +527,10 @@ void updateAnimation(uint32_t now) {
 
   lidAmount = lerpf(lidAmount, targetLid, 0.22f);
 
-  if (mode == MODE_REACT) {
+  if (activeReaction == BuddyReaction::Generic) {
     pupilTargetX = 0;
     pupilTargetY = 0;
-  } else if (mode == MODE_SLEEP) {
+  } else if (coreState == BuddyCoreState::Sleeping) {
     pupilTargetX = 0;
     pupilTargetY = 10;
   } else if (now >= nextLookAt) {
@@ -511,7 +544,7 @@ void updateAnimation(uint32_t now) {
     scheduleNextLook(now);
   }
 
-  float follow = (mode == MODE_REACT) ? 0.22f : 0.08f;
+  float follow = (activeReaction == BuddyReaction::Generic) ? 0.22f : 0.08f;
   pupilX = lerpf(pupilX, pupilTargetX, follow);
   pupilY = lerpf(pupilY, pupilTargetY, follow);
 }
@@ -623,7 +656,7 @@ void renderSleepZ(uint32_t now) {
   constexpr int Z_X = 212;
   constexpr int Z_Y = 31;
   fillBackgroundRegion(effectCanvas, Z_Y, EFFECT_REGION_W, EFFECT_REGION_H);
-  if (mode == MODE_SLEEP) {
+  if (coreState == BuddyCoreState::Sleeping) {
     effectCanvas.setTextColor(COL_SLEEP);
     effectCanvas.setTextSize(2);
     effectCanvas.setCursor(0, 34 + int(sinf(now * 0.003f) * 3.0f) - Z_Y);
@@ -635,14 +668,14 @@ void renderSleepZ(uint32_t now) {
 
 void renderFrame(uint32_t now) {
   int bobY;
-  if (mode == MODE_SLEEP) {
+  if (coreState == BuddyCoreState::Sleeping) {
     bobY = int(sinf(now * 0.0022f) * 3.0f);
   } else {
     bobY = int(sinf(now * 0.0045f) * 1.5f);
   }
 
   int y = eyeY + bobY;
-  bool reacting = (mode == MODE_REACT);
+  bool reacting = (activeReaction == BuddyReaction::Generic);
 
   renderEyeRegion(leftEyeX, y, leftEyeX - 34, reacting);
   renderEyeRegion(rightEyeX, y, rightEyeX + 34, reacting);
