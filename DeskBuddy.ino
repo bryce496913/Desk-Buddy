@@ -126,6 +126,12 @@ struct MicrophoneReading {
 
 constexpr uint32_t MIC_SAMPLE_INTERVAL_US = 1000;  // approximately 1 kHz
 constexpr uint32_t MIC_REPORT_INTERVAL_MS = 500;   // two reports per second
+constexpr uint32_t MIC_DETECTION_WINDOW_MS = 32;
+constexpr uint32_t MIC_CALIBRATION_MS = 3000;
+constexpr uint32_t MIC_EVENT_COOLDOWN_MS = 2500;
+constexpr float MIC_AMBIENT_MULTIPLIER = 3.0f;
+constexpr float MIC_AMBIENT_MARGIN = 18.0f;
+constexpr float MIC_MINIMUM_THRESHOLD = 70.0f;
 
 MicrophoneReading latestMicReading = { 0, 0, 0, 0, 0 };
 uint32_t nextMicSampleAt = 0;
@@ -134,6 +140,15 @@ uint32_t micSampleSum = 0;
 uint16_t micSampleCount = 0;
 uint16_t micSampleMinimum = UINT16_MAX;
 uint16_t micSampleMaximum = 0;
+uint32_t micDetectionWindowStartedAt = 0;
+uint16_t micDetectionMinimum = UINT16_MAX;
+uint16_t micDetectionMaximum = 0;
+uint16_t latestMicDetectionAmplitude = 0;
+float micAmbientAmplitude = 0.0f;
+float latestMicDetectionThreshold = MIC_MINIMUM_THRESHOLD;
+uint32_t micCalibrationStartedAt = 0;
+uint32_t micCooldownUntil = 0;
+bool micEventSinceLastReport = false;
 
 // Backlight
 int backlightCurrent = 255;
@@ -268,6 +283,46 @@ void updateInputs(uint32_t now) {
 // =========================
 // Microphone input
 // =========================
+void updateMicrophoneNoiseFloor(uint16_t amplitude, bool calibrating) {
+  if (micAmbientAmplitude == 0.0f) {
+    micAmbientAmplitude = amplitude;
+    return;
+  }
+
+  // Calibration converges quickly. Afterward, background changes are followed
+  // slowly, while unusually loud windows have little influence on the floor.
+  float alpha = calibrating ? 0.20f : 0.06f;
+  if (!calibrating && amplitude > latestMicDetectionThreshold) alpha = 0.005f;
+  micAmbientAmplitude += (float(amplitude) - micAmbientAmplitude) * alpha;
+}
+
+bool reactionBuzzerIsPlaying() {
+  return mode == MODE_REACT && reactStep < REACT_COUNT;
+}
+
+void processMicrophoneDetectionWindow(uint32_t now, uint16_t amplitude) {
+  latestMicDetectionAmplitude = amplitude;
+  bool calibrating = (now - micCalibrationStartedAt) < MIC_CALIBRATION_MS;
+
+  // Do not teach the ambient floor the Buddy's own reaction sound.
+  if (calibrating || mode != MODE_REACT) {
+    updateMicrophoneNoiseFloor(amplitude, calibrating);
+  }
+
+  latestMicDetectionThreshold = max(
+      MIC_MINIMUM_THRESHOLD,
+      micAmbientAmplitude * MIC_AMBIENT_MULTIPLIER + MIC_AMBIENT_MARGIN);
+
+  bool cooldownFinished = (int32_t)(now - micCooldownUntil) >= 0;
+  bool mayTrigger = !calibrating && mode == MODE_IDLE &&
+                    !reactionBuzzerIsPlaying() && cooldownFinished;
+  if (mayTrigger && amplitude >= latestMicDetectionThreshold) {
+    micEventSinceLastReport = true;
+    micCooldownUntil = now + MIC_EVENT_COOLDOWN_MS;
+    triggerReaction(now);
+  }
+}
+
 void updateMicrophone(uint32_t now) {
   uint32_t nowUs = micros();
   if ((int32_t)(nowUs - nextMicSampleAt) >= 0) {
@@ -280,6 +335,17 @@ void updateMicrophone(uint32_t now) {
     micSampleCount++;
     if (sample < micSampleMinimum) micSampleMinimum = sample;
     if (sample > micSampleMaximum) micSampleMaximum = sample;
+    if (sample < micDetectionMinimum) micDetectionMinimum = sample;
+    if (sample > micDetectionMaximum) micDetectionMaximum = sample;
+  }
+
+  if ((now - micDetectionWindowStartedAt) >= MIC_DETECTION_WINDOW_MS &&
+      micDetectionMinimum != UINT16_MAX) {
+    processMicrophoneDetectionWindow(
+        now, micDetectionMaximum - micDetectionMinimum);
+    micDetectionWindowStartedAt = now;
+    micDetectionMinimum = UINT16_MAX;
+    micDetectionMaximum = 0;
   }
 
   if ((now - micWindowStartedAt) >= MIC_REPORT_INTERVAL_MS && micSampleCount > 0) {
@@ -296,7 +362,19 @@ void updateMicrophone(uint32_t now) {
     Serial.print(" max=");
     Serial.print(latestMicReading.maximum);
     Serial.print(" peak-to-peak=");
-    Serial.println(latestMicReading.peakToPeak);
+    Serial.print(latestMicReading.peakToPeak);
+    Serial.print(" short-p2p=");
+    Serial.print(latestMicDetectionAmplitude);
+    Serial.print(" ambient=");
+    Serial.print(micAmbientAmplitude, 1);
+    Serial.print(" threshold=");
+    Serial.print(latestMicDetectionThreshold, 1);
+    if ((now - micCalibrationStartedAt) < MIC_CALIBRATION_MS) {
+      Serial.print(" CALIBRATING");
+    }
+    if (micEventSinceLastReport) Serial.print(" EVENT");
+    Serial.println();
+    micEventSinceLastReport = false;
 
     micWindowStartedAt = now;
     micSampleSum = 0;
@@ -575,9 +653,13 @@ void setup() {
 
   nextMicSampleAt = micros();
   micWindowStartedAt = millis();
+  micDetectionWindowStartedAt = micWindowStartedAt;
   Serial.println("MAX4466 microphone enabled on GP26 / ADC0");
 
   playBootSound();
+  // Start calibration after the boot tones so they cannot establish the floor.
+  micCalibrationStartedAt = millis();
+  micDetectionWindowStartedAt = micCalibrationStartedAt;
 }
 
 void loop() {
