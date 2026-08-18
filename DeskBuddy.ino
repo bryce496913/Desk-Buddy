@@ -16,6 +16,7 @@
 #define TOUCH_PIN   5    // TTP223 OUT
 #define BUTTON_PIN  7    // push button to GND, use INPUT_PULLUP
 #define BUZZER_PIN  15   // passive buzzer signal
+#define MIC_PIN     26   // MAX4466 OUT (ADC0)
 
 // =========================
 // Display
@@ -111,6 +112,28 @@ uint32_t nextReactNoteAt = 0;
 uint8_t reactStep = 0;
 
 uint32_t lastFrameAt = 0;
+
+// =========================
+// Microphone diagnostics
+// =========================
+struct MicrophoneReading {
+  uint16_t average;
+  uint16_t minimum;
+  uint16_t maximum;
+  uint16_t peakToPeak;
+  uint32_t timestamp;
+};
+
+constexpr uint32_t MIC_SAMPLE_INTERVAL_US = 1000;  // approximately 1 kHz
+constexpr uint32_t MIC_REPORT_INTERVAL_MS = 500;   // two reports per second
+
+MicrophoneReading latestMicReading = { 0, 0, 0, 0, 0 };
+uint32_t nextMicSampleAt = 0;
+uint32_t micWindowStartedAt = 0;
+uint32_t micSampleSum = 0;
+uint16_t micSampleCount = 0;
+uint16_t micSampleMinimum = UINT16_MAX;
+uint16_t micSampleMaximum = 0;
 
 // Backlight
 int backlightCurrent = 255;
@@ -239,6 +262,47 @@ void updateInputs(uint32_t now) {
     if (buttonStable == LOW) {
       toggleSleep(now);
     }
+  }
+}
+
+// =========================
+// Microphone input
+// =========================
+void updateMicrophone(uint32_t now) {
+  uint32_t nowUs = micros();
+  if ((int32_t)(nowUs - nextMicSampleAt) >= 0) {
+    // Schedule from the actual read time so a busy frame never causes a burst
+    // of catch-up ADC reads that could delay the rest of the application.
+    nextMicSampleAt = nowUs + MIC_SAMPLE_INTERVAL_US;
+
+    uint16_t sample = analogRead(MIC_PIN);
+    micSampleSum += sample;
+    micSampleCount++;
+    if (sample < micSampleMinimum) micSampleMinimum = sample;
+    if (sample > micSampleMaximum) micSampleMaximum = sample;
+  }
+
+  if ((now - micWindowStartedAt) >= MIC_REPORT_INTERVAL_MS && micSampleCount > 0) {
+    latestMicReading.average = micSampleSum / micSampleCount;
+    latestMicReading.minimum = micSampleMinimum;
+    latestMicReading.maximum = micSampleMaximum;
+    latestMicReading.peakToPeak = micSampleMaximum - micSampleMinimum;
+    latestMicReading.timestamp = now;
+
+    Serial.print("MIC avg=");
+    Serial.print(latestMicReading.average);
+    Serial.print(" min=");
+    Serial.print(latestMicReading.minimum);
+    Serial.print(" max=");
+    Serial.print(latestMicReading.maximum);
+    Serial.print(" peak-to-peak=");
+    Serial.println(latestMicReading.peakToPeak);
+
+    micWindowStartedAt = now;
+    micSampleSum = 0;
+    micSampleCount = 0;
+    micSampleMinimum = UINT16_MAX;
+    micSampleMaximum = 0;
   }
 }
 
@@ -485,6 +549,7 @@ void setup() {
   pinMode(TOUCH_PIN, INPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(MIC_PIN, INPUT);
   pinMode(TFT_BL, OUTPUT);
 
   analogWriteFreq(1000);
@@ -508,12 +573,17 @@ void setup() {
   scheduleNextLook(millis());
   scheduleNextDrowsy(millis());
 
+  nextMicSampleAt = micros();
+  micWindowStartedAt = millis();
+  Serial.println("MAX4466 microphone enabled on GP26 / ADC0");
+
   playBootSound();
 }
 
 void loop() {
   uint32_t now = millis();
 
+  updateMicrophone(now);
   updateInputs(now);
   updateAnimation(now);
   updateSound(now);
