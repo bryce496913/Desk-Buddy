@@ -16,7 +16,7 @@
 #define TOUCH_PIN   5    // TTP223 OUT
 #define BUTTON_PIN  7    // push button to GND, use INPUT_PULLUP
 #define BUZZER_PIN  15   // passive buzzer signal
-#define MIC_PIN     26   // MAX4466 OUT (ADC0); MAX4466 VCC is wired to VBUS
+#define MIC_PIN     26   // MAX4466 OUT -> GP26/ADC0; VCC -> Pico 3V3; GND -> Pico GND
 
 // =========================
 // Display
@@ -147,6 +147,8 @@ constexpr float MIC_AMBIENT_MULTIPLIER = 3.0f;
 constexpr float MIC_AMBIENT_MARGIN = 18.0f;
 constexpr float MIC_MINIMUM_THRESHOLD = 70.0f;
 constexpr uint16_t MIC_ADC_MAX = 4095;             // 12-bit RP2040 ADC
+// Measurement diagnostic only: near-rail samples indicate clipping/saturation,
+// not electrical over-voltage protection for GP26.
 constexpr uint16_t MIC_ADC_CLIP_LEVEL = MIC_ADC_MAX - (MIC_ADC_MAX / 100);
 
 MicrophoneReading latestMicReading = { 0, 0, 0, 0, 0 };
@@ -719,8 +721,7 @@ void setup() {
   nextMicSampleAt = micros();
   micWindowStartedAt = millis();
   micDetectionWindowStartedAt = micWindowStartedAt;
-  Serial.println("MAX4466 microphone enabled on GP26 / ADC0 (VCC: VBUS)");
-  Serial.println("Keep MAX4466 OUT at or below 3.3 V; ADC-CLIPPED flags rail clipping");
+  Serial.println("MAX4466 microphone enabled on GP26 / ADC0 (VCC: 3V3)");
 
   playBootSound();
   // Start calibration after the boot tones so they cannot establish the floor.
