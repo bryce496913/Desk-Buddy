@@ -16,7 +16,7 @@
 #define TOUCH_PIN   5    // TTP223 OUT
 #define BUTTON_PIN  7    // push button to GND, use INPUT_PULLUP
 #define BUZZER_PIN  15   // passive buzzer signal
-#define MIC_PIN     26   // MAX4466 OUT (ADC0)
+#define MIC_PIN     26   // MAX4466 OUT (ADC0); MAX4466 VCC is wired to VBUS
 
 // =========================
 // Display
@@ -134,6 +134,8 @@ constexpr uint32_t MIC_EVENT_COOLDOWN_MS = 2500;
 constexpr float MIC_AMBIENT_MULTIPLIER = 3.0f;
 constexpr float MIC_AMBIENT_MARGIN = 18.0f;
 constexpr float MIC_MINIMUM_THRESHOLD = 70.0f;
+constexpr uint16_t MIC_ADC_MAX = 4095;             // 12-bit RP2040 ADC
+constexpr uint16_t MIC_ADC_CLIP_LEVEL = MIC_ADC_MAX - (MIC_ADC_MAX / 100);
 
 MicrophoneReading latestMicReading = { 0, 0, 0, 0, 0 };
 uint32_t nextMicSampleAt = 0;
@@ -151,6 +153,7 @@ float latestMicDetectionThreshold = MIC_MINIMUM_THRESHOLD;
 uint32_t micCalibrationStartedAt = 0;
 uint32_t micCooldownUntil = 0;
 bool micEventSinceLastReport = false;
+bool micAdcClippedSinceLastReport = false;
 
 // Backlight
 int backlightCurrent = 255;
@@ -343,6 +346,7 @@ void updateMicrophone(uint32_t now) {
     nextMicSampleAt = nowUs + MIC_SAMPLE_INTERVAL_US;
 
     uint16_t sample = analogRead(MIC_PIN);
+    if (sample >= MIC_ADC_CLIP_LEVEL) micAdcClippedSinceLastReport = true;
     micSampleSum += sample;
     micSampleCount++;
     if (sample < micSampleMinimum) micSampleMinimum = sample;
@@ -385,8 +389,10 @@ void updateMicrophone(uint32_t now) {
       Serial.print(" CALIBRATING");
     }
     if (micEventSinceLastReport) Serial.print(" EVENT");
+    if (micAdcClippedSinceLastReport) Serial.print(" ADC-CLIPPED");
     Serial.println();
     micEventSinceLastReport = false;
+    micAdcClippedSinceLastReport = false;
 
     micWindowStartedAt = now;
     micSampleSum = 0;
@@ -655,6 +661,7 @@ void setup() {
   pinMode(MIC_PIN, INPUT);
   pinMode(TFT_BL, OUTPUT);
 
+  analogReadResolution(12);
   analogWriteFreq(1000);
   analogWriteRange(255);
   analogWrite(TFT_BL, 255);
@@ -679,7 +686,8 @@ void setup() {
   nextMicSampleAt = micros();
   micWindowStartedAt = millis();
   micDetectionWindowStartedAt = micWindowStartedAt;
-  Serial.println("MAX4466 microphone enabled on GP26 / ADC0");
+  Serial.println("MAX4466 microphone enabled on GP26 / ADC0 (VCC: VBUS)");
+  Serial.println("Keep MAX4466 OUT at or below 3.3 V; ADC-CLIPPED flags rail clipping");
 
   playBootSound();
   // Start calibration after the boot tones so they cannot establish the floor.
