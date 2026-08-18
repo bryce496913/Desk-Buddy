@@ -26,8 +26,18 @@ Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 constexpr int SCREEN_W = 280;
 constexpr int SCREEN_H = 240;
 
-// Full-screen 16-bit canvas for smooth drawing
-GFXcanvas16 canvas(SCREEN_W, SCREEN_H);
+// A single reusable eye-region canvas keeps animated updates flicker-free without
+// reserving a full-screen framebuffer. It is large enough for either eye at the
+// maximum idle/sleep bob, lid overdraw, and its reaction spark.
+constexpr int EYE_REGION_W = 80;
+constexpr int EYE_REGION_H = 117;
+constexpr int EYE_REGION_Y = 56;
+GFXcanvas16 eyeCanvas(EYE_REGION_W, EYE_REGION_H);  // 18,720 bytes
+
+// A second small canvas restores and redraws the animated 12x22 sleep-Z region.
+constexpr int EFFECT_REGION_W = 12;
+constexpr int EFFECT_REGION_H = 22;
+GFXcanvas16 effectCanvas(EFFECT_REGION_W, EFFECT_REGION_H);  // 528 bytes
 
 // =========================
 // Color helpers
@@ -336,47 +346,57 @@ void updateAnimation(uint32_t now) {
 // =========================
 // Drawing
 // =========================
-void drawGradientBackground() {
+uint16_t backgroundColorAt(int y) {
+  float t = float(y) / float(SCREEN_H - 1);
+  uint8_t r = uint8_t((1.0f - t) * 6  + t * 10);
+  uint8_t g = uint8_t((1.0f - t) * 10 + t * 18);
+  uint8_t b = uint8_t((1.0f - t) * 22 + t * 38);
+  return rgb565(r, g, b);
+}
+
+void fillBackgroundRegion(GFXcanvas16 &target, int screenY, int width, int height) {
+  for (int y = 0; y < height; y++) {
+    target.drawFastHLine(0, y, width, backgroundColorAt(screenY + y));
+  }
+}
+
+void drawStaticBackground() {
   for (int y = 0; y < SCREEN_H; y++) {
-    float t = float(y) / float(SCREEN_H - 1);
-    uint8_t r = uint8_t((1.0f - t) * 6  + t * 10);
-    uint8_t g = uint8_t((1.0f - t) * 10 + t * 18);
-    uint8_t b = uint8_t((1.0f - t) * 22 + t * 38);
-    canvas.drawFastHLine(0, y, SCREEN_W, rgb565(r, g, b));
+    tft.drawFastHLine(0, y, SCREEN_W, backgroundColorAt(y));
   }
 
   // subtle top dots
   for (int i = 0; i < 6; i++) {
     int x = 25 + i * 45;
     int y = 24 + (i % 2) * 8;
-    canvas.fillCircle(x, y, 2, COL_ACCENT);
+    tft.fillCircle(x, y, 2, COL_ACCENT);
   }
 
   // small bottom base
-  canvas.fillRoundRect((SCREEN_W / 2) - 16, SCREEN_H - 22, 32, 8, 4, COL_PANEL);
+  tft.fillRoundRect((SCREEN_W / 2) - 16, SCREEN_H - 22, 32, 8, 4, COL_PANEL);
 }
 
-void drawSpark(int x, int y, int len, uint16_t c) {
-  canvas.drawLine(x - len, y, x + len, y, c);
-  canvas.drawLine(x, y - len, x, y + len, c);
-  canvas.drawLine(x - len / 2, y - len / 2, x + len / 2, y + len / 2, c);
-  canvas.drawLine(x - len / 2, y + len / 2, x + len / 2, y - len / 2, c);
+void drawSpark(GFXcanvas16 &target, int x, int y, int len, uint16_t c) {
+  target.drawLine(x - len, y, x + len, y, c);
+  target.drawLine(x, y - len, x, y + len, c);
+  target.drawLine(x - len / 2, y - len / 2, x + len / 2, y + len / 2, c);
+  target.drawLine(x - len / 2, y + len / 2, x + len / 2, y - len / 2, c);
 }
 
-void drawEye(int cx, int cy, int w, int h, float lid, bool reacting) {
+void drawEye(GFXcanvas16 &target, int cx, int cy, int w, int h, float lid, bool reacting) {
   int x = cx - (w / 2);
   int y = cy - (h / 2);
 
   // fully closed eye
   if (lid > 0.93f) {
-    canvas.fillRoundRect(x + 10, cy - 2, w - 20, 5, 2, COL_EYE_LINE);
-    canvas.drawFastHLine(cx - 18, cy + 5, 36, COL_HILITE);
+    target.fillRoundRect(x + 10, cy - 2, w - 20, 5, 2, COL_EYE_LINE);
+    target.drawFastHLine(cx - 18, cy + 5, 36, COL_HILITE);
     return;
   }
 
   // eye body
-  canvas.fillRoundRect(x, y, w, h, eyeCorner, COL_EYE_WHITE);
-  canvas.drawRoundRect(x, y, w, h, eyeCorner, COL_EYE_LINE);
+  target.fillRoundRect(x, y, w, h, eyeCorner, COL_EYE_WHITE);
+  target.drawRoundRect(x, y, w, h, eyeCorner, COL_EYE_LINE);
 
   // pupil limits
   int pupilRangeX = (w / 2) - 22;
@@ -389,33 +409,58 @@ void drawEye(int cx, int cy, int w, int h, float lid, bool reacting) {
   int irisR = reacting ? 17 : 18;
   int pupilR = reacting ? 7 : 8;
 
-  canvas.fillCircle(px, py, irisR, irisColor);
-  canvas.fillCircle(px, py, pupilR, COL_PUPIL);
-  canvas.fillCircle(px - 5, py - 5, 4, COL_HILITE);
-  canvas.fillCircle(px + 6, py + 6, 2, COL_HILITE);
+  target.fillCircle(px, py, irisR, irisColor);
+  target.fillCircle(px, py, pupilR, COL_PUPIL);
+  target.fillCircle(px - 5, py - 5, 4, COL_HILITE);
+  target.fillCircle(px + 6, py + 6, 2, COL_HILITE);
 
   // lower accent
-  canvas.drawFastHLine(x + 16, y + h - 12, w - 32, COL_HILITE);
+  target.drawFastHLine(x + 16, y + h - 12, w - 32, COL_HILITE);
 
   // lids cover eye from top/bottom
   int cover = int((h / 2.0f) * lid);
 
   if (cover > 0) {
     // top lid
-    canvas.fillRoundRect(x - 1, y - 1, w + 2, cover + 4, eyeCorner, COL_BG_TOP);
+    target.fillRoundRect(x - 1, y - 1, w + 2, cover + 4, eyeCorner, COL_BG_TOP);
     // bottom lid
-    canvas.fillRoundRect(x - 1, y + h - cover - 3, w + 2, cover + 5, eyeCorner, COL_BG_BOTTOM);
+    target.fillRoundRect(x - 1, y + h - cover - 3, w + 2, cover + 5, eyeCorner, COL_BG_BOTTOM);
 
     // lid edge line
-    canvas.drawFastHLine(x + 10, y + cover, w - 20, COL_EYE_LINE);
-    canvas.drawFastHLine(x + 10, y + h - cover, w - 20, COL_EYE_LINE);
+    target.drawFastHLine(x + 10, y + cover, w - 20, COL_EYE_LINE);
+    target.drawFastHLine(x + 10, y + h - cover, w - 20, COL_EYE_LINE);
   }
 }
 
-void renderFrame(uint32_t now) {
-  canvas.fillScreen(0);
-  drawGradientBackground();
+void renderEyeRegion(int screenCenterX, int screenCenterY,
+                     int sparkCenterX, bool reacting) {
+  int screenX = screenCenterX - (EYE_REGION_W / 2);
+  fillBackgroundRegion(eyeCanvas, EYE_REGION_Y, EYE_REGION_W, EYE_REGION_H);
+  drawEye(eyeCanvas, EYE_REGION_W / 2, screenCenterY - EYE_REGION_Y,
+          eyeW, eyeH, lidAmount, reacting);
+  if (reacting) {
+    drawSpark(eyeCanvas, sparkCenterX - screenX,
+              screenCenterY - 56 - EYE_REGION_Y, 5, COL_IRIS_REACT);
+  }
+  tft.drawRGBBitmap(screenX, EYE_REGION_Y, eyeCanvas.getBuffer(),
+                    EYE_REGION_W, EYE_REGION_H);
+}
 
+void renderSleepZ(uint32_t now) {
+  constexpr int Z_X = 212;
+  constexpr int Z_Y = 31;
+  fillBackgroundRegion(effectCanvas, Z_Y, EFFECT_REGION_W, EFFECT_REGION_H);
+  if (mode == MODE_SLEEP) {
+    effectCanvas.setTextColor(COL_SLEEP);
+    effectCanvas.setTextSize(2);
+    effectCanvas.setCursor(0, 34 + int(sinf(now * 0.003f) * 3.0f) - Z_Y);
+    effectCanvas.print("Z");
+  }
+  tft.drawRGBBitmap(Z_X, Z_Y, effectCanvas.getBuffer(),
+                    EFFECT_REGION_W, EFFECT_REGION_H);
+}
+
+void renderFrame(uint32_t now) {
   int bobY;
   if (mode == MODE_SLEEP) {
     bobY = int(sinf(now * 0.0022f) * 3.0f);
@@ -426,22 +471,9 @@ void renderFrame(uint32_t now) {
   int y = eyeY + bobY;
   bool reacting = (mode == MODE_REACT);
 
-  drawEye(leftEyeX, y, eyeW, eyeH, lidAmount, reacting);
-  drawEye(rightEyeX, y, eyeW, eyeH, lidAmount, reacting);
-
-  if (reacting) {
-    drawSpark(leftEyeX - 34, y - 56, 5, COL_IRIS_REACT);
-    drawSpark(rightEyeX + 34, y - 56, 5, COL_IRIS_REACT);
-  }
-
-  if (mode == MODE_SLEEP) {
-    canvas.setTextColor(COL_SLEEP);
-    canvas.setTextSize(2);
-    canvas.setCursor(212, 34 + int(sinf(now * 0.003f) * 3.0f));
-    canvas.print("Z");
-  }
-
-  tft.drawRGBBitmap(0, 0, canvas.getBuffer(), SCREEN_W, SCREEN_H);
+  renderEyeRegion(leftEyeX, y, leftEyeX - 34, reacting);
+  renderEyeRegion(rightEyeX, y, rightEyeX + 34, reacting);
+  renderSleepZ(now);
 }
 
 // =========================
@@ -465,7 +497,7 @@ void setup() {
 
   tft.init(240, 280);
   tft.setRotation(1);
-  tft.fillScreen(ST77XX_BLACK);
+  drawStaticBackground();
 
   // If your colors look like a photo negative, uncomment this:
   // tft.invertDisplay(true);
@@ -487,7 +519,7 @@ void loop() {
   updateSound(now);
   updateBacklight();
 
-  // Target ~20 FPS. Stable and light enough for full-screen SPI updates.
+  // Target ~20 FPS, updating only the buffered animated regions.
   if (now - lastFrameAt >= 50) {
     lastFrameAt = now;
     renderFrame(now);
