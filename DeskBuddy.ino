@@ -13,10 +13,13 @@
 #define TFT_SCLK  18
 #define TFT_MOSI  19
 
-#define TOUCH_PIN   5    // TTP223 OUT
+#define TOUCH_PIN   5    // TTP223 OUT -> GP5; VCC -> VBUS; GND -> Pico GND
 #define BUTTON_PIN  7    // push button to GND, use INPUT_PULLUP
 #define BUZZER_PIN  15   // passive buzzer signal
-#define MIC_PIN     26   // MAX4466 OUT -> GP26/ADC0; VCC -> Pico 3V3; GND -> Pico GND
+#define MIC_PIN     26   // MAX4466 OUT -> GP26/ADC0; VCC -> VBUS; GND -> Pico GND
+
+// Both sensors are VBUS-powered, but signals connected to Pico GPIO/ADC inputs
+// must remain within the Pico input-voltage limits.
 
 // =========================
 // Display
@@ -144,9 +147,18 @@ constexpr uint32_t MIC_DETECTION_WINDOW_MS = 32;
 constexpr uint32_t MIC_CALIBRATION_MS = 3000;
 constexpr uint32_t MIC_EVENT_COOLDOWN_MS = 2500;
 constexpr float MIC_AMBIENT_MULTIPLIER = 3.0f;
-constexpr float MIC_AMBIENT_MARGIN = 18.0f;
-constexpr float MIC_MINIMUM_THRESHOLD = 70.0f;
-constexpr uint16_t MIC_ADC_MAX = 4095;             // 12-bit RP2040 ADC
+constexpr uint8_t MIC_ADC_BITS = 12;
+constexpr uint16_t MIC_ADC_MAX = (1UL << MIC_ADC_BITS) - 1;
+
+// Preserve the detector sensitivity originally tuned on a 10-bit (0..1023)
+// ADC by expressing each absolute threshold as a fraction of full scale.
+constexpr uint16_t MIC_BASELINE_ADC_MAX = 1023;
+constexpr uint16_t scaleMicThreshold(uint16_t baselineCount) {
+  return (uint32_t(baselineCount) * MIC_ADC_MAX + MIC_BASELINE_ADC_MAX / 2) /
+         MIC_BASELINE_ADC_MAX;
+}
+constexpr uint16_t MIC_MINIMUM_THRESHOLD = scaleMicThreshold(70);
+constexpr uint16_t MIC_AMBIENT_MARGIN = scaleMicThreshold(18);
 // Measurement diagnostic only: near-rail samples indicate clipping/saturation,
 // not electrical over-voltage protection for GP26.
 constexpr uint16_t MIC_ADC_CLIP_LEVEL = MIC_ADC_MAX - (MIC_ADC_MAX / 100);
@@ -721,7 +733,16 @@ void setup() {
   nextMicSampleAt = micros();
   micWindowStartedAt = millis();
   micDetectionWindowStartedAt = micWindowStartedAt;
-  Serial.println("MAX4466 microphone enabled on GP26 / ADC0 (VCC: 3V3)");
+  Serial.println("MAX4466 microphone enabled on GP26 / ADC0 (VCC: VBUS)");
+  Serial.println("TTP223 touch enabled on GP5 (VCC: VBUS)");
+  Serial.print("MIC ADC: ");
+  Serial.print(MIC_ADC_BITS);
+  Serial.print("-bit / max=");
+  Serial.println(MIC_ADC_MAX);
+  Serial.print("MIC minimum threshold=");
+  Serial.print(MIC_MINIMUM_THRESHOLD);
+  Serial.print(" ambient margin=");
+  Serial.println(MIC_AMBIENT_MARGIN);
 
   playBootSound();
   // Start calibration after the boot tones so they cannot establish the floor.
