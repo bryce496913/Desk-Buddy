@@ -109,7 +109,9 @@ uint32_t nextDrowsyAt = 0;
 
 uint32_t reactUntil = 0;
 uint32_t nextReactNoteAt = 0;
+uint32_t reactNoteEndsAt = 0;
 uint8_t reactStep = 0;
+bool reactNotePlaying = false;
 
 uint32_t lastFrameAt = 0;
 
@@ -172,10 +174,19 @@ const uint8_t REACT_COUNT = sizeof(reactNotes) / sizeof(reactNotes[0]);
 
 void playSequenceBlocking(const uint16_t *notes, const uint16_t *durs, uint8_t count, uint16_t gapMs) {
   for (uint8_t i = 0; i < count; i++) {
-    tone(BUZZER_PIN, notes[i], durs[i]);
-    delay(durs[i] + gapMs);
+    // Stop each note ourselves rather than relying on tone()'s duration timer.
+    // This also guarantees a silent gap before the next frequency is started.
+    tone(BUZZER_PIN, notes[i]);
+    delay(durs[i]);
+    noTone(BUZZER_PIN);
+    delay(gapMs);
   }
   noTone(BUZZER_PIN);
+}
+
+void stopReactionSound() {
+  noTone(BUZZER_PIN);
+  reactNotePlaying = false;
 }
 
 void playBootSound() {
@@ -217,6 +228,7 @@ void scheduleNextDrowsy(uint32_t now) {
 void triggerReaction(uint32_t now) {
   if (mode == MODE_SLEEP) return;
 
+  stopReactionSound();
   mode = MODE_REACT;
   reactUntil = now + 1800;
   reactStep = 0;
@@ -242,7 +254,7 @@ void toggleSleep(uint32_t now) {
     backlightTarget = 40;
     blinkActive = false;
     reactUntil = 0;
-    noTone(BUZZER_PIN);
+    stopReactionSound();
     playSleepSound();
   }
 }
@@ -405,11 +417,24 @@ void updateBacklight() {
 // Sound updater
 // =========================
 void updateSound(uint32_t now) {
-  if (mode != MODE_REACT) return;
+  if (mode != MODE_REACT) {
+    if (reactNotePlaying) stopReactionSound();
+    return;
+  }
 
-  if (reactStep < REACT_COUNT && now >= nextReactNoteAt) {
-    tone(BUZZER_PIN, reactNotes[reactStep], reactDurs[reactStep]);
-    nextReactNoteAt = now + reactDurs[reactStep] + 18;
+  if (reactNotePlaying) {
+    if ((int32_t)(now - reactNoteEndsAt) < 0) return;
+
+    noTone(BUZZER_PIN);
+    reactNotePlaying = false;
+    nextReactNoteAt = now + 18;
+    return;
+  }
+
+  if (reactStep < REACT_COUNT && (int32_t)(now - nextReactNoteAt) >= 0) {
+    tone(BUZZER_PIN, reactNotes[reactStep]);
+    reactNoteEndsAt = now + reactDurs[reactStep];
+    reactNotePlaying = true;
     reactStep++;
   }
 }
