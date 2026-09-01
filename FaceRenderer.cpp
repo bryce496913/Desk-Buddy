@@ -52,6 +52,7 @@ uint32_t nextLookAt = 0;
 uint32_t drowsyUntil = 0;
 uint32_t nextDrowsyAt = 0;
 uint32_t reactUntil = 0;
+FaceExpression activeExpression = FaceExpression::Normal;
 uint32_t lastFrameAt = 0;
 int backlightCurrent = 255;
 int backlightTarget = 255;
@@ -87,10 +88,34 @@ void drawSpark(GFXcanvas16 &target, int x, int y, int len, uint16_t c) {
   target.drawLine(x - len / 2, y - len / 2, x + len / 2, y + len / 2, c);
   target.drawLine(x - len / 2, y + len / 2, x + len / 2, y - len / 2, c);
 }
-void drawEye(GFXcanvas16 &target, int cx, int cy, int w, int h, float lid, bool reacting) {
+struct EyeExpressionParams {
+  float topLid;
+  float bottomLid;
+  int irisRadius;
+  int pupilRadius;
+  int pupilBiasX;
+  int pupilBiasY;
+  bool reactiveIris;
+  bool showSpark;
+};
+
+EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye) {
+  switch (expression) {
+    case FaceExpression::Happy:
+      return {0.10f, 0.34f, 18, 8, isLeftEye ? 3 : -3, -6, false, false};
+    case FaceExpression::Startled:
+      return {0.0f, 0.0f, 17, 4, 0, 0, true, true};
+    case FaceExpression::Normal:
+    default:
+      return {lidAmount, lidAmount, 18, 8, 0, 0, false, false};
+  }
+}
+
+void drawEye(GFXcanvas16 &target, int cx, int cy, int w, int h,
+             const EyeExpressionParams &params) {
   int x = cx - (w / 2);
   int y = cy - (h / 2);
-  if (lid > 0.93f) {
+  if (params.topLid > 0.93f && params.bottomLid > 0.93f) {
     target.fillRoundRect(x + 10, cy - 2, w - 20, 5, 2, COL_EYE_LINE);
     target.drawFastHLine(cx - 18, cy + 5, 36, COL_HILITE);
     return;
@@ -99,30 +124,34 @@ void drawEye(GFXcanvas16 &target, int cx, int cy, int w, int h, float lid, bool 
   target.drawRoundRect(x, y, w, h, eyeCorner, COL_EYE_LINE);
   int pupilRangeX = (w / 2) - 22;
   int pupilRangeY = (h / 2) - 24;
-  int px = cx + int(clampf(pupilX, -pupilRangeX, pupilRangeX));
-  int py = cy + int(clampf(pupilY, -pupilRangeY, pupilRangeY));
-  uint16_t irisColor = reacting ? COL_IRIS_REACT : COL_IRIS;
-  int irisR = reacting ? 17 : 18;
-  int pupilR = reacting ? 7 : 8;
-  target.fillCircle(px, py, irisR, irisColor);
-  target.fillCircle(px, py, pupilR, COL_PUPIL);
+  int px = cx + int(clampf(pupilX + params.pupilBiasX, -pupilRangeX, pupilRangeX));
+  int py = cy + int(clampf(pupilY + params.pupilBiasY, -pupilRangeY, pupilRangeY));
+  uint16_t irisColor = params.reactiveIris ? COL_IRIS_REACT : COL_IRIS;
+  target.fillCircle(px, py, params.irisRadius, irisColor);
+  target.fillCircle(px, py, params.pupilRadius, COL_PUPIL);
   target.fillCircle(px - 5, py - 5, 4, COL_HILITE);
   target.fillCircle(px + 6, py + 6, 2, COL_HILITE);
   target.drawFastHLine(x + 16, y + h - 12, w - 32, COL_HILITE);
-  int cover = int((h / 2.0f) * lid);
-  if (cover > 0) {
-    target.fillRoundRect(x - 1, y - 1, w + 2, cover + 4, eyeCorner, COL_BG_TOP);
-    target.fillRoundRect(x - 1, y + h - cover - 3, w + 2, cover + 5, eyeCorner, COL_BG_BOTTOM);
-    target.drawFastHLine(x + 10, y + cover, w - 20, COL_EYE_LINE);
-    target.drawFastHLine(x + 10, y + h - cover, w - 20, COL_EYE_LINE);
+  int topCover = int((h / 2.0f) * params.topLid);
+  int bottomCover = int((h / 2.0f) * params.bottomLid);
+  if (topCover > 0) {
+    target.fillRoundRect(x - 1, y - 1, w + 2, topCover + 4, eyeCorner, COL_BG_TOP);
+    target.drawFastHLine(x + 10, y + topCover, w - 20, COL_EYE_LINE);
+  }
+  if (bottomCover > 0) {
+    target.fillRoundRect(x - 1, y + h - bottomCover - 3, w + 2,
+                         bottomCover + 5, eyeCorner, COL_BG_BOTTOM);
+    target.drawFastHLine(x + 10, y + h - bottomCover, w - 20, COL_EYE_LINE);
   }
 }
-void renderEyeRegion(int screenCenterX, int screenCenterY, int sparkCenterX, bool reacting) {
+void renderEyeRegion(int screenCenterX, int screenCenterY, int sparkCenterX,
+                     FaceExpression expression, bool isLeftEye) {
   int screenX = screenCenterX - (EYE_REGION_W / 2);
+  EyeExpressionParams params = expressionParams(expression, isLeftEye);
   fillBackgroundRegion(eyeCanvas, EYE_REGION_Y, EYE_REGION_W, EYE_REGION_H);
   drawEye(eyeCanvas, EYE_REGION_W / 2, screenCenterY - EYE_REGION_Y,
-          eyeW, eyeH, lidAmount, reacting);
-  if (reacting)
+          eyeW, eyeH, params);
+  if (params.showSpark)
     drawSpark(eyeCanvas, sparkCenterX - screenX,
               screenCenterY - 56 - EYE_REGION_Y, 5, COL_IRIS_REACT);
   tft.drawRGBBitmap(screenX, EYE_REGION_Y, eyeCanvas.getBuffer(), EYE_REGION_W, EYE_REGION_H);
@@ -143,9 +172,10 @@ void renderFrame(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction)
   int bobY = coreState == BuddyCoreState::Sleeping
       ? int(sinf(now * 0.0022f) * 3.0f) : int(sinf(now * 0.0045f) * 1.5f);
   int y = eyeY + bobY;
-  bool reacting = reaction == BuddyReaction::Generic;
-  renderEyeRegion(leftEyeX, y, leftEyeX - 34, reacting);
-  renderEyeRegion(rightEyeX, y, rightEyeX + 34, reacting);
+  FaceExpression expression = reaction == BuddyReaction::Generic
+      ? activeExpression : FaceExpression::Normal;
+  renderEyeRegion(leftEyeX, y, leftEyeX - 34, expression, true);
+  renderEyeRegion(rightEyeX, y, rightEyeX + 34, expression, false);
   renderSleepZ(now, coreState);
 }
 void updateBacklight() {
@@ -173,24 +203,30 @@ void beginFaceRenderer() {
 void scheduleFaceBehavior(uint32_t now) {
   scheduleNextBlink(now); scheduleNextLook(now); scheduleNextDrowsy(now);
 }
-void startFaceReaction(uint32_t now) {
+void startFaceReaction(uint32_t now, FaceExpression expression) {
   reactUntil = now + 1800;
+  activeExpression = expression;
   pupilTargetX = 0;
   pupilTargetY = 0;
   drowsyUntil = 0;
 }
 bool isFaceReactionFinished(uint32_t now) { return now >= reactUntil; }
-void finishFaceReaction(uint32_t now) { scheduleFaceBehavior(now); }
+void finishFaceReaction(uint32_t now) {
+  activeExpression = FaceExpression::Normal;
+  scheduleFaceBehavior(now);
+}
 void enterSleepFace(uint32_t) {
   backlightTarget = 40;
   blinkActive = false;
   reactUntil = 0;
+  activeExpression = FaceExpression::Normal;
 }
 void wakeFace(uint32_t now) {
   backlightTarget = 255;
   blinkActive = true;
   blinkStart = now;
   blinkDuration = 260;
+  activeExpression = FaceExpression::Normal;
   scheduleFaceBehavior(now);
 }
 void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction) {
