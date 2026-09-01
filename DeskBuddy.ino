@@ -32,9 +32,9 @@ void loop() {
     processBuddyEvent(BuddyEvent::SoundDetected, now);
   }
 
-  InputEvents inputEvents = updateInputs(now, getBuddyCoreState());
+  InputEvents inputEvents = updateInputs(now);
   if (inputEvents.touch) processBuddyEvent(BuddyEvent::Touch, now);
-  if (inputEvents.button) processBuddyEvent(inputEvents.buttonEvent, now);
+  if (inputEvents.button) processBuddyEvent(BuddyEvent::ButtonPressed, now);
 
   updateBehaviorEngine(now);
   updateFaceRenderer(now, getBuddyCoreState(), getBuddyReaction());

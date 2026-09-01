@@ -7,18 +7,26 @@ namespace {
 bool touchLastRaw = false;
 bool touchStable = false;
 uint32_t touchDebounceAt = 0;
-bool buttonLastRaw = true;
-bool buttonStable = true;
+bool buttonLastRaw = false;
+bool buttonStable = false;
 uint32_t buttonDebounceAt = 0;
 }
 
 void beginInputs() {
   pinMode(TOUCH_PIN, INPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+  // Seed the debouncer from the pins instead of assuming their startup state.
+  // The button is active LOW because INPUT_PULLUP is used.
+  touchLastRaw = touchStable = digitalRead(TOUCH_PIN) == HIGH;
+  buttonLastRaw = buttonStable = digitalRead(BUTTON_PIN) == LOW;
+  uint32_t now = millis();
+  touchDebounceAt = now;
+  buttonDebounceAt = now;
 }
 
-InputEvents updateInputs(uint32_t now, BuddyCoreState coreState) {
-  InputEvents events = {false, false, BuddyEvent::SleepRequested};
+InputEvents updateInputs(uint32_t now) {
+  InputEvents events = {false, false};
   bool rawTouch = digitalRead(TOUCH_PIN) == HIGH;
   if (rawTouch != touchLastRaw) {
     touchLastRaw = rawTouch;
@@ -31,17 +39,15 @@ InputEvents updateInputs(uint32_t now, BuddyCoreState coreState) {
     }
   }
 
-  bool rawButton = digitalRead(BUTTON_PIN) == HIGH;
+  bool rawButton = digitalRead(BUTTON_PIN) == LOW;
   if (rawButton != buttonLastRaw) {
     buttonLastRaw = rawButton;
     buttonDebounceAt = now;
   }
   if ((now - buttonDebounceAt) > 25 && rawButton != buttonStable) {
     buttonStable = rawButton;
-    if (buttonStable == LOW) {
+    if (buttonStable) {
       events.button = true;
-      events.buttonEvent = coreState == BuddyCoreState::Sleeping
-          ? BuddyEvent::Wake : BuddyEvent::SleepRequested;
     }
   }
   return events;
