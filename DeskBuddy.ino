@@ -97,6 +97,11 @@ enum class BuddyReaction : uint8_t {
   Generic
 };
 
+// Declare this explicitly after BuddyEvent is defined. Arduino's sketch
+// preprocessor otherwise generates its prototype before the enum declaration,
+// leaving the generated prototype unable to resolve BuddyEvent.
+void processBuddyEvent(BuddyEvent event, uint32_t now);
+
 BuddyCoreState coreState = BuddyCoreState::Awake;
 BuddyReaction activeReaction = BuddyReaction::Idle;
 
