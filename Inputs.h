@@ -6,7 +6,6 @@ void beginInputs();
 struct InputEvents {
   bool touch;
   bool button;
-  BuddyEvent buttonEvent;
 };
 
-InputEvents updateInputs(uint32_t now, BuddyCoreState coreState);
+InputEvents updateInputs(uint32_t now);

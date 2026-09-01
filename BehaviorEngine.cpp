@@ -47,11 +47,12 @@ void updateBehaviorEngine(uint32_t now) {
 
 void processBuddyEvent(BuddyEvent event, uint32_t now) {
   switch (event) {
-    case BuddyEvent::SleepRequested:
-      if (coreState == BuddyCoreState::Awake) enterSleep(now);
-      break;
-    case BuddyEvent::Wake:
-      if (coreState == BuddyCoreState::Sleeping) wakeBuddy(now);
+    case BuddyEvent::ButtonPressed:
+      if (coreState == BuddyCoreState::Sleeping) {
+        wakeBuddy(now);
+      } else {
+        enterSleep(now);
+      }
       break;
     case BuddyEvent::Touch:
     case BuddyEvent::SoundDetected:
