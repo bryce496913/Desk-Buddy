@@ -16,10 +16,12 @@
 #define TOUCH_PIN   5    // TTP223 OUT -> GP5; VCC -> VBUS; GND -> Pico GND
 #define BUTTON_PIN  7    // push button to GND, use INPUT_PULLUP
 #define BUZZER_PIN  15   // passive buzzer signal
-#define MIC_PIN     26   // MAX4466 OUT -> GP26/ADC0; VCC -> VBUS; GND -> Pico GND
+#define SOUND_SENSOR_PIN 26  // VKLSVAN OUT -> GP26; VCC -> 3V3; GND -> Pico GND
 
-// Both sensors are VBUS-powered, but signals connected to Pico GPIO/ADC inputs
-// must remain within the Pico input-voltage limits.
+// The VKLSVAN digital output idles HIGH and goes LOW when sound exceeds the
+// threshold set by its onboard blue potentiometer.
+constexpr uint8_t SOUND_SENSOR_ACTIVE_LEVEL = LOW;
+static_assert(SOUND_SENSOR_ACTIVE_LEVEL == LOW, "VKLSVAN trigger must be active LOW");
 
 // =========================
 // Display
@@ -130,56 +132,12 @@ bool reactNotePlaying = false;
 
 uint32_t lastFrameAt = 0;
 
-// =========================
-// Microphone diagnostics
-// =========================
-struct MicrophoneReading {
-  uint16_t average;
-  uint16_t minimum;
-  uint16_t maximum;
-  uint16_t peakToPeak;
-  uint32_t timestamp;
-};
-
-constexpr uint32_t MIC_SAMPLE_INTERVAL_US = 1000;  // approximately 1 kHz
-constexpr uint32_t MIC_REPORT_INTERVAL_MS = 500;   // two reports per second
-constexpr uint32_t MIC_DETECTION_WINDOW_MS = 32;
-constexpr uint32_t MIC_CALIBRATION_MS = 3000;
-constexpr uint32_t MIC_EVENT_COOLDOWN_MS = 2500;
-constexpr float MIC_AMBIENT_MULTIPLIER = 3.0f;
-constexpr uint8_t MIC_ADC_BITS = 12;
-constexpr uint16_t MIC_ADC_MAX = (1UL << MIC_ADC_BITS) - 1;
-
-// Preserve the detector sensitivity originally tuned on a 10-bit (0..1023)
-// ADC by expressing each absolute threshold as a fraction of full scale.
-constexpr uint16_t MIC_BASELINE_ADC_MAX = 1023;
-constexpr uint16_t scaleMicThreshold(uint16_t baselineCount) {
-  return (uint32_t(baselineCount) * MIC_ADC_MAX + MIC_BASELINE_ADC_MAX / 2) /
-         MIC_BASELINE_ADC_MAX;
-}
-constexpr uint16_t MIC_MINIMUM_THRESHOLD = scaleMicThreshold(70);
-constexpr uint16_t MIC_AMBIENT_MARGIN = scaleMicThreshold(18);
-// Measurement diagnostic only: near-rail samples indicate clipping/saturation,
-// not electrical over-voltage protection for GP26.
-constexpr uint16_t MIC_ADC_CLIP_LEVEL = MIC_ADC_MAX - (MIC_ADC_MAX / 100);
-
-MicrophoneReading latestMicReading = { 0, 0, 0, 0, 0 };
-uint32_t nextMicSampleAt = 0;
-uint32_t micWindowStartedAt = 0;
-uint32_t micSampleSum = 0;
-uint16_t micSampleCount = 0;
-uint16_t micSampleMinimum = UINT16_MAX;
-uint16_t micSampleMaximum = 0;
-uint32_t micDetectionWindowStartedAt = 0;
-uint16_t micDetectionMinimum = UINT16_MAX;
-uint16_t micDetectionMaximum = 0;
-uint16_t latestMicDetectionAmplitude = 0;
-float micAmbientAmplitude = 0.0f;
-float latestMicDetectionThreshold = MIC_MINIMUM_THRESHOLD;
-uint32_t micCalibrationStartedAt = 0;
-uint32_t micCooldownUntil = 0;
-bool micEventSinceLastReport = false;
-bool micAdcClippedSinceLastReport = false;
+// Sound sensor event capture
+constexpr uint32_t SOUND_EVENT_COOLDOWN_MS = 2500;
+constexpr uint32_t SOUND_STARTUP_IGNORE_MS = 250;
+volatile bool soundActivationPending = false;
+uint32_t soundCooldownUntil = 0;
+uint32_t soundIgnoreUntil = 0;
 
 // Backlight
 int backlightCurrent = 255;
@@ -286,6 +244,8 @@ void wakeBuddy(uint32_t now) {
   scheduleNextLook(now);
   scheduleNextDrowsy(now);
   playWakeSound();
+  // Ignore any edge captured from the blocking wake tones.
+  soundIgnoreUntil = millis() + SOUND_STARTUP_IGNORE_MS;
 }
 
 void processBuddyEvent(BuddyEvent event, uint32_t now) {
@@ -339,111 +299,32 @@ void updateInputs(uint32_t now) {
 }
 
 // =========================
-// Microphone input
+// Digital sound sensor input
 // =========================
-void updateMicrophoneNoiseFloor(uint16_t amplitude, bool calibrating) {
-  if (micAmbientAmplitude == 0.0f) {
-    micAmbientAmplitude = amplitude;
-    return;
-  }
-
-  // Calibration converges quickly. Afterward, background changes are followed
-  // slowly, while unusually loud windows have little influence on the floor.
-  float alpha = calibrating ? 0.20f : 0.06f;
-  if (!calibrating && amplitude > latestMicDetectionThreshold) alpha = 0.005f;
-  micAmbientAmplitude += (float(amplitude) - micAmbientAmplitude) * alpha;
+void captureSoundActivation() {
+  // Keep the ISR minimal. The main loop applies all state and cooldown rules.
+  soundActivationPending = true;
 }
 
-bool reactionBuzzerIsPlaying() {
-  return activeReaction == BuddyReaction::Generic && reactStep < REACT_COUNT;
-}
+void updateSoundSensor(uint32_t now) {
+  noInterrupts();
+  bool activationCaptured = soundActivationPending;
+  soundActivationPending = false;
+  interrupts();
 
-void processMicrophoneDetectionWindow(uint32_t now, uint16_t amplitude) {
-  latestMicDetectionAmplitude = amplitude;
-  bool calibrating = (now - micCalibrationStartedAt) < MIC_CALIBRATION_MS;
+  if (!activationCaptured) return;
 
-  // Do not teach the ambient floor the Buddy's own reaction sound.
-  if (calibrating || activeReaction != BuddyReaction::Generic) {
-    updateMicrophoneNoiseFloor(amplitude, calibrating);
-  }
+  // Always consume captured edges. Ineligible activations (including the
+  // Buddy's own tones) are discarded instead of being deferred.
+  bool ignored = (int32_t)(now - soundIgnoreUntil) < 0;
+  bool coolingDown = (int32_t)(now - soundCooldownUntil) < 0;
+  bool reactionActive = activeReaction != BuddyReaction::Idle || reactNotePlaying;
+  if (ignored || coolingDown || reactionActive ||
+      coreState == BuddyCoreState::Sleeping) return;
 
-  latestMicDetectionThreshold = max(
-      MIC_MINIMUM_THRESHOLD,
-      micAmbientAmplitude * MIC_AMBIENT_MULTIPLIER + MIC_AMBIENT_MARGIN);
-
-  bool cooldownFinished = (int32_t)(now - micCooldownUntil) >= 0;
-  bool mayTrigger = !calibrating && coreState == BuddyCoreState::Awake &&
-                    activeReaction == BuddyReaction::Idle &&
-                    !reactionBuzzerIsPlaying() && cooldownFinished;
-  if (mayTrigger && amplitude >= latestMicDetectionThreshold) {
-    micEventSinceLastReport = true;
-    micCooldownUntil = now + MIC_EVENT_COOLDOWN_MS;
-    processBuddyEvent(BuddyEvent::SoundDetected, now);
-  }
-}
-
-void updateMicrophone(uint32_t now) {
-  uint32_t nowUs = micros();
-  if ((int32_t)(nowUs - nextMicSampleAt) >= 0) {
-    // Schedule from the actual read time so a busy frame never causes a burst
-    // of catch-up ADC reads that could delay the rest of the application.
-    nextMicSampleAt = nowUs + MIC_SAMPLE_INTERVAL_US;
-
-    uint16_t sample = analogRead(MIC_PIN);
-    if (sample >= MIC_ADC_CLIP_LEVEL) micAdcClippedSinceLastReport = true;
-    micSampleSum += sample;
-    micSampleCount++;
-    if (sample < micSampleMinimum) micSampleMinimum = sample;
-    if (sample > micSampleMaximum) micSampleMaximum = sample;
-    if (sample < micDetectionMinimum) micDetectionMinimum = sample;
-    if (sample > micDetectionMaximum) micDetectionMaximum = sample;
-  }
-
-  if ((now - micDetectionWindowStartedAt) >= MIC_DETECTION_WINDOW_MS &&
-      micDetectionMinimum != UINT16_MAX) {
-    processMicrophoneDetectionWindow(
-        now, micDetectionMaximum - micDetectionMinimum);
-    micDetectionWindowStartedAt = now;
-    micDetectionMinimum = UINT16_MAX;
-    micDetectionMaximum = 0;
-  }
-
-  if ((now - micWindowStartedAt) >= MIC_REPORT_INTERVAL_MS && micSampleCount > 0) {
-    latestMicReading.average = micSampleSum / micSampleCount;
-    latestMicReading.minimum = micSampleMinimum;
-    latestMicReading.maximum = micSampleMaximum;
-    latestMicReading.peakToPeak = micSampleMaximum - micSampleMinimum;
-    latestMicReading.timestamp = now;
-
-    Serial.print("MIC avg=");
-    Serial.print(latestMicReading.average);
-    Serial.print(" min=");
-    Serial.print(latestMicReading.minimum);
-    Serial.print(" max=");
-    Serial.print(latestMicReading.maximum);
-    Serial.print(" peak-to-peak=");
-    Serial.print(latestMicReading.peakToPeak);
-    Serial.print(" short-p2p=");
-    Serial.print(latestMicDetectionAmplitude);
-    Serial.print(" ambient=");
-    Serial.print(micAmbientAmplitude, 1);
-    Serial.print(" threshold=");
-    Serial.print(latestMicDetectionThreshold, 1);
-    if ((now - micCalibrationStartedAt) < MIC_CALIBRATION_MS) {
-      Serial.print(" CALIBRATING");
-    }
-    if (micEventSinceLastReport) Serial.print(" EVENT");
-    if (micAdcClippedSinceLastReport) Serial.print(" ADC-CLIPPED");
-    Serial.println();
-    micEventSinceLastReport = false;
-    micAdcClippedSinceLastReport = false;
-
-    micWindowStartedAt = now;
-    micSampleSum = 0;
-    micSampleCount = 0;
-    micSampleMinimum = UINT16_MAX;
-    micSampleMaximum = 0;
-  }
+  Serial.println("SOUND EVENT");
+  soundCooldownUntil = now + SOUND_EVENT_COOLDOWN_MS;
+  processBuddyEvent(BuddyEvent::SoundDetected, now);
 }
 
 // =========================
@@ -705,10 +586,10 @@ void setup() {
   pinMode(TOUCH_PIN, INPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(MIC_PIN, INPUT);
+  pinMode(SOUND_SENSOR_PIN, INPUT);
   pinMode(TFT_BL, OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(SOUND_SENSOR_PIN), captureSoundActivation, FALLING);
 
-  analogReadResolution(12);
   analogWriteFreq(1000);
   analogWriteRange(255);
   analogWrite(TFT_BL, 255);
@@ -730,30 +611,22 @@ void setup() {
   scheduleNextLook(millis());
   scheduleNextDrowsy(millis());
 
-  nextMicSampleAt = micros();
-  micWindowStartedAt = millis();
-  micDetectionWindowStartedAt = micWindowStartedAt;
-  Serial.println("MAX4466 microphone enabled on GP26 / ADC0 (VCC: VBUS)");
+  Serial.println("VKLSVAN sound sensor ready on GP26 (VCC: 3V3)");
+  Serial.println("Trigger level: ACTIVE LOW (HIGH = idle, LOW = sound)");
   Serial.println("TTP223 touch enabled on GP5 (VCC: VBUS)");
-  Serial.print("MIC ADC: ");
-  Serial.print(MIC_ADC_BITS);
-  Serial.print("-bit / max=");
-  Serial.println(MIC_ADC_MAX);
-  Serial.print("MIC minimum threshold=");
-  Serial.print(MIC_MINIMUM_THRESHOLD);
-  Serial.print(" ambient margin=");
-  Serial.println(MIC_AMBIENT_MARGIN);
 
   playBootSound();
-  // Start calibration after the boot tones so they cannot establish the floor.
-  micCalibrationStartedAt = millis();
-  micDetectionWindowStartedAt = micCalibrationStartedAt;
+  // Discard edges from boot audio and briefly ignore subsequent startup noise.
+  noInterrupts();
+  soundActivationPending = false;
+  interrupts();
+  soundIgnoreUntil = millis() + SOUND_STARTUP_IGNORE_MS;
 }
 
 void loop() {
   uint32_t now = millis();
 
-  updateMicrophone(now);
+  updateSoundSensor(now);
   updateInputs(now);
   updateAnimation(now);
   updateSound(now);
