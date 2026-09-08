@@ -10,4 +10,4 @@ void playWakeSound();
 void startReactionSound(uint32_t now);
 void stopReactionSound();
 void updateSoundEngine(uint32_t now, BuddyReaction reaction);
-bool isReactionAudioActive();
+bool isSoundEngineActive();

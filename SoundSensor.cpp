@@ -9,6 +9,7 @@ constexpr uint32_t SOUND_STARTUP_IGNORE_MS = 250;
 volatile bool soundActivationPending = false;
 uint32_t soundCooldownUntil = 0;
 uint32_t soundIgnoreUntil = 0;
+bool buddyAudioWasActive = false;
 
 void captureSoundActivation() { soundActivationPending = true; }
 }
@@ -20,16 +21,22 @@ void beginSoundSensor() {
   Serial.println("Trigger level: ACTIVE LOW (HIGH = idle, LOW = sound)");
 }
 
-bool updateSoundSensor(uint32_t now, bool sleeping, bool reactionActive) {
+bool updateSoundSensor(uint32_t now, bool sleeping, bool buddyAudioActive) {
   noInterrupts();
   bool activationCaptured = soundActivationPending;
   soundActivationPending = false;
   interrupts();
+
+  if (buddyAudioWasActive && !buddyAudioActive) {
+    soundIgnoreUntil = now + SOUND_STARTUP_IGNORE_MS;
+  }
+  buddyAudioWasActive = buddyAudioActive;
+
   if (!activationCaptured) return false;
 
   bool ignored = (int32_t)(now - soundIgnoreUntil) < 0;
   bool coolingDown = (int32_t)(now - soundCooldownUntil) < 0;
-  if (ignored || coolingDown || reactionActive || sleeping) return false;
+  if (ignored || coolingDown || buddyAudioActive || sleeping) return false;
 
   Serial.println("SOUND EVENT");
   soundCooldownUntil = now + SOUND_EVENT_COOLDOWN_MS;
