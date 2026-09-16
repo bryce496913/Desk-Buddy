@@ -4,7 +4,14 @@
 #include "Config.h"
 
 namespace {
-enum class SoundSequence : uint8_t { None, Boot, Reaction, Sleep, Wake };
+enum class SoundSequence : uint8_t {
+  None,
+  Boot,
+  HappyReaction,
+  StartledReaction,
+  Sleep,
+  Wake
+};
 
 struct SequenceDefinition {
   const uint16_t *notes;
@@ -19,15 +26,20 @@ const uint16_t sleepNotes[] = {700, 560, 420};
 const uint16_t sleepDurs[] = {80, 90, 110};
 const uint16_t wakeNotes[] = {660, 980, 1480};
 const uint16_t wakeDurs[] = {60, 60, 90};
-const uint16_t reactNotes[] = {988, 1319, 1175, 1760, 1480, 1047, 1568};
-const uint16_t reactDurs[] = {65, 55, 55, 75, 65, 55, 85};
+const uint16_t happyNotes[] = {988, 1319, 1175, 1760, 1480, 1047, 1568};
+const uint16_t happyDurs[] = {65, 55, 55, 75, 65, 55, 85};
+const uint16_t startledNotes[] = {2093, 784, 1568, 659};
+const uint16_t startledDurs[] = {55, 80, 50, 110};
 
 constexpr SequenceDefinition BOOT_SEQUENCE = {bootNotes, bootDurs, 3, 20};
 constexpr SequenceDefinition SLEEP_SEQUENCE = {sleepNotes, sleepDurs, 3, 24};
 constexpr SequenceDefinition WAKE_SEQUENCE = {wakeNotes, wakeDurs, 3, 20};
-constexpr SequenceDefinition REACTION_SEQUENCE = {
-    reactNotes, reactDurs,
-    static_cast<uint8_t>(sizeof(reactNotes) / sizeof(reactNotes[0])), 18};
+constexpr SequenceDefinition HAPPY_REACTION_SEQUENCE = {
+    happyNotes, happyDurs,
+    static_cast<uint8_t>(sizeof(happyNotes) / sizeof(happyNotes[0])), 18};
+constexpr SequenceDefinition STARTLED_REACTION_SEQUENCE = {
+    startledNotes, startledDurs,
+    static_cast<uint8_t>(sizeof(startledNotes) / sizeof(startledNotes[0])), 15};
 
 SoundSequence currentSequence = SoundSequence::None;
 const SequenceDefinition *currentDefinition = nullptr;
@@ -37,6 +49,11 @@ bool notePlaying = false;
 
 bool timeReached(uint32_t now, uint32_t deadline) {
   return static_cast<int32_t>(now - deadline) >= 0;
+}
+
+bool isReactionSequence(SoundSequence sequence) {
+  return sequence == SoundSequence::HappyReaction ||
+         sequence == SoundSequence::StartledReaction;
 }
 
 void stopSequence() {
@@ -74,17 +91,21 @@ void playWakeSound() {
   startSequence(SoundSequence::Wake, WAKE_SEQUENCE, millis());
 }
 
-void startReactionSound(uint32_t now) {
-  startSequence(SoundSequence::Reaction, REACTION_SEQUENCE, now);
+void startReactionSound(uint32_t now, ReactionSound sound) {
+  if (sound == ReactionSound::Happy) {
+    startSequence(SoundSequence::HappyReaction, HAPPY_REACTION_SEQUENCE, now);
+  } else {
+    startSequence(SoundSequence::StartledReaction, STARTLED_REACTION_SEQUENCE,
+                  now);
+  }
 }
 
 void stopReactionSound() {
-  if (currentSequence == SoundSequence::Reaction) stopSequence();
+  if (isReactionSequence(currentSequence)) stopSequence();
 }
 
 void updateSoundEngine(uint32_t now, BuddyReaction reaction) {
-  if (currentSequence == SoundSequence::Reaction &&
-      reaction != BuddyReaction::Generic) {
+  if (isReactionSequence(currentSequence) && reaction != BuddyReaction::Generic) {
     stopSequence();
     return;
   }

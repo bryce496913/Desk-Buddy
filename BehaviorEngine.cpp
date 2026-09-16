@@ -8,11 +8,12 @@ namespace {
 BuddyCoreState coreState = BuddyCoreState::Awake;
 BuddyReaction activeReaction = BuddyReaction::Idle;
 
-void startGenericReaction(uint32_t now, FaceExpression expression) {
+void startGenericReaction(uint32_t now, FaceExpression expression,
+                          ReactionSound sound) {
   stopReactionSound();
   activeReaction = BuddyReaction::Generic;
   startFaceReaction(now, expression);
-  startReactionSound(now);
+  startReactionSound(now, sound);
 }
 
 void enterSleep(uint32_t now) {
@@ -56,11 +57,12 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       break;
     case BuddyEvent::Touch:
       if (coreState == BuddyCoreState::Awake)
-        startGenericReaction(now, FaceExpression::Happy);
+        startGenericReaction(now, FaceExpression::Happy, ReactionSound::Happy);
       break;
     case BuddyEvent::SoundDetected:
       if (coreState == BuddyCoreState::Awake)
-        startGenericReaction(now, FaceExpression::Startled);
+        startGenericReaction(now, FaceExpression::Startled,
+                             ReactionSound::Startled);
       break;
   }
 }
