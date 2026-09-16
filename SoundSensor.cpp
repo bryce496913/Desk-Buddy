@@ -21,7 +21,8 @@ void beginSoundSensor() {
   Serial.println("Trigger level: ACTIVE LOW (HIGH = idle, LOW = sound)");
 }
 
-bool updateSoundSensor(uint32_t now, bool sleeping, bool buddyAudioActive) {
+bool updateSoundSensor(uint32_t now, bool sleeping, bool reactionActive,
+                       bool buddyAudioActive) {
   noInterrupts();
   bool activationCaptured = soundActivationPending;
   soundActivationPending = false;
@@ -36,7 +37,8 @@ bool updateSoundSensor(uint32_t now, bool sleeping, bool buddyAudioActive) {
 
   bool ignored = (int32_t)(now - soundIgnoreUntil) < 0;
   bool coolingDown = (int32_t)(now - soundCooldownUntil) < 0;
-  if (ignored || coolingDown || buddyAudioActive || sleeping) return false;
+  if (ignored || coolingDown || buddyAudioActive || reactionActive || sleeping)
+    return false;
 
   Serial.println("SOUND EVENT");
   soundCooldownUntil = now + SOUND_EVENT_COOLDOWN_MS;
