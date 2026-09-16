@@ -25,9 +25,10 @@ void setup() {
 void loop() {
   uint32_t now = millis();
   BuddyCoreState coreState = getBuddyCoreState();
+  bool reactionActive = getBuddyReaction() == BuddyReaction::Generic;
 
   if (updateSoundSensor(now, coreState == BuddyCoreState::Sleeping,
-                        isSoundEngineActive())) {
+                        reactionActive, isSoundEngineActive())) {
     processBuddyEvent(BuddyEvent::SoundDetected, now);
   }
 
