@@ -26,26 +26,61 @@ const uint16_t sleepNotes[] = {700, 560, 420};
 const uint16_t sleepDurs[] = {80, 90, 110};
 const uint16_t wakeNotes[] = {660, 980, 1480};
 const uint16_t wakeDurs[] = {60, 60, 90};
-const uint16_t happyNotes[] = {988, 1319, 1175, 1760, 1480, 1047, 1568};
-const uint16_t happyDurs[] = {65, 55, 55, 75, 65, 55, 85};
-const uint16_t startledNotes[] = {2093, 784, 1568, 659};
-const uint16_t startledDurs[] = {55, 80, 50, 110};
+constexpr uint16_t happyNotes[] = {988, 1319, 1175, 1760, 1480, 1047, 1568};
+constexpr uint16_t happyDurs[] = {65, 55, 55, 75, 65, 55, 85};
+constexpr uint16_t happyBounceNotes[] = {784, 1175, 988, 1397, 1760};
+constexpr uint16_t happyBounceDurs[] = {70, 65, 60, 70, 100};
+constexpr uint16_t happyChirpNotes[] = {1047, 1319, 1568, 2093, 1760, 2349};
+constexpr uint16_t happyChirpDurs[] = {45, 45, 50, 65, 50, 90};
+constexpr uint16_t startledNotes[] = {2093, 784, 1568, 659};
+constexpr uint16_t startledDurs[] = {55, 80, 50, 110};
+constexpr uint16_t startledJumpNotes[] = {2349, 988, 1976, 1175, 2217};
+constexpr uint16_t startledJumpDurs[] = {40, 65, 40, 60, 85};
+constexpr uint16_t startledQuestionNotes[] = {1760, 2637, 1319, 2093};
+constexpr uint16_t startledQuestionDurs[] = {45, 50, 70, 95};
 
 constexpr SequenceDefinition BOOT_SEQUENCE = {bootNotes, bootDurs, 3, 20};
 constexpr SequenceDefinition SLEEP_SEQUENCE = {sleepNotes, sleepDurs, 3, 24};
 constexpr SequenceDefinition WAKE_SEQUENCE = {wakeNotes, wakeDurs, 3, 20};
-constexpr SequenceDefinition HAPPY_REACTION_SEQUENCE = {
-    happyNotes, happyDurs,
-    static_cast<uint8_t>(sizeof(happyNotes) / sizeof(happyNotes[0])), 18};
-constexpr SequenceDefinition STARTLED_REACTION_SEQUENCE = {
-    startledNotes, startledDurs,
-    static_cast<uint8_t>(sizeof(startledNotes) / sizeof(startledNotes[0])), 15};
+constexpr SequenceDefinition HAPPY_REACTION_SEQUENCES[] = {
+    {happyNotes, happyDurs,
+     static_cast<uint8_t>(sizeof(happyNotes) / sizeof(happyNotes[0])), 18},
+    {happyBounceNotes, happyBounceDurs,
+     static_cast<uint8_t>(sizeof(happyBounceNotes) /
+                          sizeof(happyBounceNotes[0])),
+     22},
+    {happyChirpNotes, happyChirpDurs,
+     static_cast<uint8_t>(sizeof(happyChirpNotes) /
+                          sizeof(happyChirpNotes[0])),
+     16}};
+constexpr SequenceDefinition STARTLED_REACTION_SEQUENCES[] = {
+    {startledNotes, startledDurs,
+     static_cast<uint8_t>(sizeof(startledNotes) / sizeof(startledNotes[0])), 15},
+    {startledJumpNotes, startledJumpDurs,
+     static_cast<uint8_t>(sizeof(startledJumpNotes) /
+                          sizeof(startledJumpNotes[0])),
+     12},
+    {startledQuestionNotes, startledQuestionDurs,
+     static_cast<uint8_t>(sizeof(startledQuestionNotes) /
+                          sizeof(startledQuestionNotes[0])),
+     14}};
+
+constexpr uint8_t HAPPY_VARIANT_COUNT =
+    sizeof(HAPPY_REACTION_SEQUENCES) / sizeof(HAPPY_REACTION_SEQUENCES[0]);
+constexpr uint8_t STARTLED_VARIANT_COUNT =
+    sizeof(STARTLED_REACTION_SEQUENCES) /
+    sizeof(STARTLED_REACTION_SEQUENCES[0]);
+static_assert(HAPPY_VARIANT_COUNT == 3, "Happy must have exactly three variants");
+static_assert(STARTLED_VARIANT_COUNT == 3,
+              "Startled must have exactly three variants");
 
 SoundSequence currentSequence = SoundSequence::None;
 const SequenceDefinition *currentDefinition = nullptr;
 uint32_t phaseEndsAt = 0;
 uint8_t noteIndex = 0;
 bool notePlaying = false;
+uint8_t lastHappyVariant = UINT8_MAX;
+uint8_t lastStartledVariant = UINT8_MAX;
 
 bool timeReached(uint32_t now, uint32_t deadline) {
   return static_cast<int32_t>(now - deadline) >= 0;
@@ -72,6 +107,15 @@ void startSequence(SoundSequence sequence, const SequenceDefinition &definition,
   currentDefinition = &definition;
   phaseEndsAt = now;
 }
+
+uint8_t selectVariant(uint8_t count, uint8_t &lastVariant) {
+  uint8_t selected = static_cast<uint8_t>(random(count));
+  if (count > 1 && selected == lastVariant) {
+    selected = static_cast<uint8_t>((selected + 1 + random(count - 1)) % count);
+  }
+  lastVariant = selected;
+  return selected;
+}
 }  // namespace
 
 void beginSoundEngine() {
@@ -93,10 +137,14 @@ void playWakeSound() {
 
 void startReactionSound(uint32_t now, ReactionSound sound) {
   if (sound == ReactionSound::Happy) {
-    startSequence(SoundSequence::HappyReaction, HAPPY_REACTION_SEQUENCE, now);
+    uint8_t variant = selectVariant(HAPPY_VARIANT_COUNT, lastHappyVariant);
+    startSequence(SoundSequence::HappyReaction,
+                  HAPPY_REACTION_SEQUENCES[variant], now);
   } else {
-    startSequence(SoundSequence::StartledReaction, STARTLED_REACTION_SEQUENCE,
-                  now);
+    uint8_t variant =
+        selectVariant(STARTLED_VARIANT_COUNT, lastStartledVariant);
+    startSequence(SoundSequence::StartledReaction,
+                  STARTLED_REACTION_SEQUENCES[variant], now);
   }
 }
 
