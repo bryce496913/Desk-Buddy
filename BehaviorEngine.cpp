@@ -72,16 +72,21 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
             static_cast<uint32_t>(now - lastTouchAt) >
                 TOUCH_REPEAT_WINDOW_MS) {
           touchStreak = 1;
-        } else if (touchStreak < UINT8_MAX) {
+        } else if (touchStreak < 3) {
           touchStreak++;
         }
         lastTouchAt = now;
 
-        const bool repeatedTouch = touchStreak >= 2;
-        startGenericReaction(
-            now,
-            repeatedTouch ? FaceExpression::Curious : FaceExpression::Happy,
-            repeatedTouch ? ReactionSound::Curious : ReactionSound::Happy);
+        if (touchStreak == 1) {
+          startGenericReaction(now, FaceExpression::Happy,
+                               ReactionSound::Happy);
+        } else if (touchStreak == 2) {
+          startGenericReaction(now, FaceExpression::Curious,
+                               ReactionSound::Curious);
+        } else {
+          startGenericReaction(now, FaceExpression::Annoyed,
+                               ReactionSound::Annoyed);
+        }
       }
       break;
     case BuddyEvent::SoundDetected:

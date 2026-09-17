@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include "BehaviorEngine.h"
 
-enum class ReactionSound : uint8_t { Happy, Curious, Startled };
+enum class ReactionSound : uint8_t { Happy, Curious, Annoyed, Startled };
 
 void beginSoundEngine();
 void playBootSound();

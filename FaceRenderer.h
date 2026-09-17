@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include "BehaviorEngine.h"
 
-enum class FaceExpression : uint8_t { Normal, Happy, Curious, Startled };
+enum class FaceExpression : uint8_t { Normal, Happy, Curious, Annoyed, Startled };
 
 void beginFaceRenderer();
 void scheduleFaceBehavior(uint32_t now);

@@ -9,6 +9,7 @@ enum class SoundSequence : uint8_t {
   Boot,
   HappyReaction,
   CuriousReaction,
+  AnnoyedReaction,
   StartledReaction,
   Sleep,
   Wake
@@ -39,6 +40,12 @@ constexpr uint16_t curiousTiltNotes[] = {932, 1175, 1047, 1397, 1245};
 constexpr uint16_t curiousTiltDurs[] = {65, 75, 85, 100, 125};
 constexpr uint16_t curiousQueryNotes[] = {659, 880, 1109, 988, 1319};
 constexpr uint16_t curiousQueryDurs[] = {70, 70, 90, 90, 135};
+constexpr uint16_t annoyedDropNotes[] = {784, 698, 587, 523};
+constexpr uint16_t annoyedDropDurs[] = {80, 85, 95, 125};
+constexpr uint16_t annoyedGrumbleNotes[] = {659, 622, 659, 554, 494};
+constexpr uint16_t annoyedGrumbleDurs[] = {65, 65, 75, 90, 130};
+constexpr uint16_t annoyedClipNotes[] = {740, 740, 622, 523};
+constexpr uint16_t annoyedClipDurs[] = {55, 70, 85, 145};
 constexpr uint16_t startledNotes[] = {2093, 784, 1568, 659};
 constexpr uint16_t startledDurs[] = {55, 80, 50, 110};
 constexpr uint16_t startledJumpNotes[] = {2349, 988, 1976, 1175, 2217};
@@ -84,6 +91,19 @@ constexpr SequenceDefinition CURIOUS_REACTION_SEQUENCES[] = {
      static_cast<uint8_t>(sizeof(curiousQueryNotes) /
                           sizeof(curiousQueryNotes[0])),
      22}};
+constexpr SequenceDefinition ANNOYED_REACTION_SEQUENCES[] = {
+    {annoyedDropNotes, annoyedDropDurs,
+     static_cast<uint8_t>(sizeof(annoyedDropNotes) /
+                          sizeof(annoyedDropNotes[0])),
+     24},
+    {annoyedGrumbleNotes, annoyedGrumbleDurs,
+     static_cast<uint8_t>(sizeof(annoyedGrumbleNotes) /
+                          sizeof(annoyedGrumbleNotes[0])),
+     18},
+    {annoyedClipNotes, annoyedClipDurs,
+     static_cast<uint8_t>(sizeof(annoyedClipNotes) /
+                          sizeof(annoyedClipNotes[0])),
+     20}};
 
 constexpr uint8_t HAPPY_VARIANT_COUNT =
     sizeof(HAPPY_REACTION_SEQUENCES) / sizeof(HAPPY_REACTION_SEQUENCES[0]);
@@ -93,11 +113,16 @@ constexpr uint8_t STARTLED_VARIANT_COUNT =
 constexpr uint8_t CURIOUS_VARIANT_COUNT =
     sizeof(CURIOUS_REACTION_SEQUENCES) /
     sizeof(CURIOUS_REACTION_SEQUENCES[0]);
+constexpr uint8_t ANNOYED_VARIANT_COUNT =
+    sizeof(ANNOYED_REACTION_SEQUENCES) /
+    sizeof(ANNOYED_REACTION_SEQUENCES[0]);
 static_assert(HAPPY_VARIANT_COUNT == 3, "Happy must have exactly three variants");
 static_assert(STARTLED_VARIANT_COUNT == 3,
               "Startled must have exactly three variants");
 static_assert(CURIOUS_VARIANT_COUNT == 3,
               "Curious must have exactly three variants");
+static_assert(ANNOYED_VARIANT_COUNT == 3,
+              "Annoyed must have exactly three variants");
 
 SoundSequence currentSequence = SoundSequence::None;
 const SequenceDefinition *currentDefinition = nullptr;
@@ -106,6 +131,7 @@ uint8_t noteIndex = 0;
 bool notePlaying = false;
 uint8_t lastHappyVariant = UINT8_MAX;
 uint8_t lastCuriousVariant = UINT8_MAX;
+uint8_t lastAnnoyedVariant = UINT8_MAX;
 uint8_t lastStartledVariant = UINT8_MAX;
 
 bool timeReached(uint32_t now, uint32_t deadline) {
@@ -115,6 +141,7 @@ bool timeReached(uint32_t now, uint32_t deadline) {
 bool isReactionSequence(SoundSequence sequence) {
   return sequence == SoundSequence::HappyReaction ||
          sequence == SoundSequence::CuriousReaction ||
+         sequence == SoundSequence::AnnoyedReaction ||
          sequence == SoundSequence::StartledReaction;
 }
 
@@ -171,6 +198,10 @@ void startReactionSound(uint32_t now, ReactionSound sound) {
     uint8_t variant = selectVariant(CURIOUS_VARIANT_COUNT, lastCuriousVariant);
     startSequence(SoundSequence::CuriousReaction,
                   CURIOUS_REACTION_SEQUENCES[variant], now);
+  } else if (sound == ReactionSound::Annoyed) {
+    uint8_t variant = selectVariant(ANNOYED_VARIANT_COUNT, lastAnnoyedVariant);
+    startSequence(SoundSequence::AnnoyedReaction,
+                  ANNOYED_REACTION_SEQUENCES[variant], now);
   } else {
     uint8_t variant =
         selectVariant(STARTLED_VARIANT_COUNT, lastStartledVariant);
