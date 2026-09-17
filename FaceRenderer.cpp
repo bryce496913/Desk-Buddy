@@ -107,6 +107,10 @@ EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye) 
       return isLeftEye
           ? EyeExpressionParams{0.02f, 0.06f, 19, 9, 5, -8, false, false}
           : EyeExpressionParams{0.28f, 0.12f, 19, 9, 5, -8, false, false};
+    case FaceExpression::Daydreaming:
+      return isLeftEye
+          ? EyeExpressionParams{0.38f, 0.10f, 18, 8, 10, -13, false, false}
+          : EyeExpressionParams{0.44f, 0.14f, 18, 8, 10, -13, false, false};
     case FaceExpression::Annoyed:
       return isLeftEye
           ? EyeExpressionParams{0.46f, 0.03f, 18, 8, -6, 2, false, false}

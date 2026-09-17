@@ -10,6 +10,11 @@ constexpr uint32_t SOUND_REPEAT_WINDOW_MS = 10000;
 constexpr uint32_t IDLE_PERSONALITY_MIN_MS = 20000;
 constexpr uint32_t IDLE_PERSONALITY_MAX_MS = 40001;
 
+enum class IdlePersonality : uint8_t {
+  Curious,
+  Daydreaming
+};
+
 BuddyCoreState coreState = BuddyCoreState::Awake;
 BuddyReaction activeReaction = BuddyReaction::Idle;
 uint32_t lastTouchAt = 0;
@@ -19,6 +24,8 @@ uint8_t soundStreak = 0;
 uint32_t nextIdlePersonalityAt = 0;
 bool idlePersonalityScheduled = false;
 bool autonomousReactionActive = false;
+IdlePersonality lastIdlePersonality = IdlePersonality::Curious;
+bool hasLastIdlePersonality = false;
 
 bool timeReached(uint32_t now, uint32_t deadline) {
   return static_cast<int32_t>(now - deadline) >= 0;
@@ -35,6 +42,24 @@ void disableIdlePersonality() {
   nextIdlePersonalityAt = 0;
   idlePersonalityScheduled = false;
   autonomousReactionActive = false;
+}
+
+IdlePersonality selectIdlePersonality() {
+  IdlePersonality selected = static_cast<IdlePersonality>(random(2));
+  if (hasLastIdlePersonality && selected == lastIdlePersonality) {
+    selected = selected == IdlePersonality::Curious
+        ? IdlePersonality::Daydreaming
+        : IdlePersonality::Curious;
+  }
+  lastIdlePersonality = selected;
+  hasLastIdlePersonality = true;
+  return selected;
+}
+
+FaceExpression faceExpressionFor(IdlePersonality personality) {
+  return personality == IdlePersonality::Curious
+      ? FaceExpression::Curious
+      : FaceExpression::Daydreaming;
 }
 
 void resetTouchHistory() {
@@ -173,7 +198,8 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
           activeReaction == BuddyReaction::Idle && !isSoundEngineActive()) {
         idlePersonalityScheduled = false;
         autonomousReactionActive = true;
-        startGenericReaction(now, FaceExpression::Curious,
+        const IdlePersonality personality = selectIdlePersonality();
+        startGenericReaction(now, faceExpressionFor(personality),
                              ReactionSound::None);
       }
       break;
