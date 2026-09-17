@@ -7,6 +7,7 @@ enum class FaceExpression : uint8_t {
   Normal,
   Happy,
   Curious,
+  Daydreaming,
   Annoyed,
   Startled,
   Suspicious,
