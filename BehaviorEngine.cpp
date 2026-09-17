@@ -6,15 +6,23 @@
 
 namespace {
 constexpr uint32_t TOUCH_REPEAT_WINDOW_MS = 6000;
+constexpr uint32_t SOUND_REPEAT_WINDOW_MS = 10000;
 
 BuddyCoreState coreState = BuddyCoreState::Awake;
 BuddyReaction activeReaction = BuddyReaction::Idle;
 uint32_t lastTouchAt = 0;
 uint8_t touchStreak = 0;
+uint32_t lastSoundAt = 0;
+uint8_t soundStreak = 0;
 
 void resetTouchHistory() {
   lastTouchAt = 0;
   touchStreak = 0;
+}
+
+void resetSoundHistory() {
+  lastSoundAt = 0;
+  soundStreak = 0;
 }
 
 void startGenericReaction(uint32_t now, FaceExpression expression,
@@ -29,6 +37,7 @@ void enterSleep(uint32_t now) {
   coreState = BuddyCoreState::Sleeping;
   activeReaction = BuddyReaction::Idle;
   resetTouchHistory();
+  resetSoundHistory();
   enterSleepFace(now);
   stopReactionSound();
   playSleepSound();
@@ -37,6 +46,7 @@ void enterSleep(uint32_t now) {
 void wakeBuddy(uint32_t now) {
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
+  resetSoundHistory();
   wakeFace(now);
   playWakeSound();
   ignoreSoundSensorAfterWake();
@@ -47,6 +57,7 @@ void beginBehaviorEngine(uint32_t now) {
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
   resetTouchHistory();
+  resetSoundHistory();
   scheduleFaceBehavior(now);
 }
 
@@ -90,9 +101,24 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       }
       break;
     case BuddyEvent::SoundDetected:
-      if (coreState == BuddyCoreState::Awake)
-        startGenericReaction(now, FaceExpression::Startled,
-                             ReactionSound::Startled);
+      if (coreState == BuddyCoreState::Awake) {
+        if (soundStreak == 0 ||
+            static_cast<uint32_t>(now - lastSoundAt) >
+                SOUND_REPEAT_WINDOW_MS) {
+          soundStreak = 1;
+        } else if (soundStreak < UINT8_MAX) {
+          soundStreak++;
+        }
+        lastSoundAt = now;
+
+        if (soundStreak == 1) {
+          startGenericReaction(now, FaceExpression::Startled,
+                               ReactionSound::Startled);
+        } else {
+          startGenericReaction(now, FaceExpression::Suspicious,
+                               ReactionSound::Suspicious);
+        }
+      }
       break;
   }
 }
