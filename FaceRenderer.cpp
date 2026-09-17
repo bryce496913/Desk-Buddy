@@ -103,6 +103,10 @@ EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye) 
   switch (expression) {
     case FaceExpression::Happy:
       return {0.10f, 0.34f, 18, 8, isLeftEye ? 3 : -3, -6, false, false};
+    case FaceExpression::Curious:
+      return isLeftEye
+          ? EyeExpressionParams{0.02f, 0.06f, 19, 9, 5, -8, false, false}
+          : EyeExpressionParams{0.28f, 0.12f, 19, 9, 5, -8, false, false};
     case FaceExpression::Startled:
       return {0.0f, 0.0f, 17, 4, 0, 0, true, true};
     case FaceExpression::Normal:
