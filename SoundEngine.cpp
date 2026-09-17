@@ -11,6 +11,7 @@ enum class SoundSequence : uint8_t {
   CuriousReaction,
   AnnoyedReaction,
   StartledReaction,
+  SuspiciousReaction,
   Sleep,
   Wake
 };
@@ -52,6 +53,12 @@ constexpr uint16_t startledJumpNotes[] = {2349, 988, 1976, 1175, 2217};
 constexpr uint16_t startledJumpDurs[] = {40, 65, 40, 60, 85};
 constexpr uint16_t startledQuestionNotes[] = {1760, 2637, 1319, 2093};
 constexpr uint16_t startledQuestionDurs[] = {45, 50, 70, 95};
+constexpr uint16_t suspiciousQueryNotes[] = {740, 554};
+constexpr uint16_t suspiciousQueryDurs[] = {120, 210};
+constexpr uint16_t suspiciousProbeNotes[] = {659, 659, 494};
+constexpr uint16_t suspiciousProbeDurs[] = {80, 90, 190};
+constexpr uint16_t suspiciousGlanceNotes[] = {587, 466, 622};
+constexpr uint16_t suspiciousGlanceDurs[] = {110, 140, 180};
 
 constexpr SequenceDefinition BOOT_SEQUENCE = {bootNotes, bootDurs, 3, 20};
 constexpr SequenceDefinition SLEEP_SEQUENCE = {sleepNotes, sleepDurs, 3, 24};
@@ -104,6 +111,19 @@ constexpr SequenceDefinition ANNOYED_REACTION_SEQUENCES[] = {
      static_cast<uint8_t>(sizeof(annoyedClipNotes) /
                           sizeof(annoyedClipNotes[0])),
      20}};
+constexpr SequenceDefinition SUSPICIOUS_REACTION_SEQUENCES[] = {
+    {suspiciousQueryNotes, suspiciousQueryDurs,
+     static_cast<uint8_t>(sizeof(suspiciousQueryNotes) /
+                          sizeof(suspiciousQueryNotes[0])),
+     90},
+    {suspiciousProbeNotes, suspiciousProbeDurs,
+     static_cast<uint8_t>(sizeof(suspiciousProbeNotes) /
+                          sizeof(suspiciousProbeNotes[0])),
+     65},
+    {suspiciousGlanceNotes, suspiciousGlanceDurs,
+     static_cast<uint8_t>(sizeof(suspiciousGlanceNotes) /
+                          sizeof(suspiciousGlanceNotes[0])),
+     75}};
 
 constexpr uint8_t HAPPY_VARIANT_COUNT =
     sizeof(HAPPY_REACTION_SEQUENCES) / sizeof(HAPPY_REACTION_SEQUENCES[0]);
@@ -116,6 +136,9 @@ constexpr uint8_t CURIOUS_VARIANT_COUNT =
 constexpr uint8_t ANNOYED_VARIANT_COUNT =
     sizeof(ANNOYED_REACTION_SEQUENCES) /
     sizeof(ANNOYED_REACTION_SEQUENCES[0]);
+constexpr uint8_t SUSPICIOUS_VARIANT_COUNT =
+    sizeof(SUSPICIOUS_REACTION_SEQUENCES) /
+    sizeof(SUSPICIOUS_REACTION_SEQUENCES[0]);
 static_assert(HAPPY_VARIANT_COUNT == 3, "Happy must have exactly three variants");
 static_assert(STARTLED_VARIANT_COUNT == 3,
               "Startled must have exactly three variants");
@@ -123,6 +146,8 @@ static_assert(CURIOUS_VARIANT_COUNT == 3,
               "Curious must have exactly three variants");
 static_assert(ANNOYED_VARIANT_COUNT == 3,
               "Annoyed must have exactly three variants");
+static_assert(SUSPICIOUS_VARIANT_COUNT == 3,
+              "Suspicious must have exactly three variants");
 
 SoundSequence currentSequence = SoundSequence::None;
 const SequenceDefinition *currentDefinition = nullptr;
@@ -133,6 +158,7 @@ uint8_t lastHappyVariant = UINT8_MAX;
 uint8_t lastCuriousVariant = UINT8_MAX;
 uint8_t lastAnnoyedVariant = UINT8_MAX;
 uint8_t lastStartledVariant = UINT8_MAX;
+uint8_t lastSuspiciousVariant = UINT8_MAX;
 
 bool timeReached(uint32_t now, uint32_t deadline) {
   return static_cast<int32_t>(now - deadline) >= 0;
@@ -142,7 +168,8 @@ bool isReactionSequence(SoundSequence sequence) {
   return sequence == SoundSequence::HappyReaction ||
          sequence == SoundSequence::CuriousReaction ||
          sequence == SoundSequence::AnnoyedReaction ||
-         sequence == SoundSequence::StartledReaction;
+         sequence == SoundSequence::StartledReaction ||
+         sequence == SoundSequence::SuspiciousReaction;
 }
 
 void stopSequence() {
@@ -202,11 +229,16 @@ void startReactionSound(uint32_t now, ReactionSound sound) {
     uint8_t variant = selectVariant(ANNOYED_VARIANT_COUNT, lastAnnoyedVariant);
     startSequence(SoundSequence::AnnoyedReaction,
                   ANNOYED_REACTION_SEQUENCES[variant], now);
-  } else {
+  } else if (sound == ReactionSound::Startled) {
     uint8_t variant =
         selectVariant(STARTLED_VARIANT_COUNT, lastStartledVariant);
     startSequence(SoundSequence::StartledReaction,
                   STARTLED_REACTION_SEQUENCES[variant], now);
+  } else {
+    uint8_t variant =
+        selectVariant(SUSPICIOUS_VARIANT_COUNT, lastSuspiciousVariant);
+    startSequence(SoundSequence::SuspiciousReaction,
+                  SUSPICIOUS_REACTION_SEQUENCES[variant], now);
   }
 }
 

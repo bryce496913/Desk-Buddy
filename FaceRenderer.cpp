@@ -113,6 +113,10 @@ EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye) 
           : EyeExpressionParams{0.60f, 0.0f, 18, 8, 3, 2, false, false};
     case FaceExpression::Startled:
       return {0.0f, 0.0f, 17, 4, 0, 0, true, true};
+    case FaceExpression::Suspicious:
+      return isLeftEye
+          ? EyeExpressionParams{0.42f, 0.08f, 18, 7, 12, 1, false, false}
+          : EyeExpressionParams{0.08f, 0.03f, 18, 7, 12, 1, false, false};
     case FaceExpression::Normal:
     default:
       return {lidAmount, lidAmount, 18, 8, 0, 0, false, false};
