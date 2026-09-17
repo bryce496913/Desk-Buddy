@@ -106,7 +106,7 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
             static_cast<uint32_t>(now - lastSoundAt) >
                 SOUND_REPEAT_WINDOW_MS) {
           soundStreak = 1;
-        } else if (soundStreak < UINT8_MAX) {
+        } else if (soundStreak < 3) {
           soundStreak++;
         }
         lastSoundAt = now;
@@ -114,9 +114,12 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
         if (soundStreak == 1) {
           startGenericReaction(now, FaceExpression::Startled,
                                ReactionSound::Startled);
-        } else {
+        } else if (soundStreak == 2) {
           startGenericReaction(now, FaceExpression::Suspicious,
                                ReactionSound::Suspicious);
+        } else {
+          startGenericReaction(now, FaceExpression::Confused,
+                               ReactionSound::Confused);
         }
       }
       break;
