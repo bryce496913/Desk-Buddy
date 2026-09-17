@@ -5,8 +5,17 @@
 #include "SoundSensor.h"
 
 namespace {
+constexpr uint32_t TOUCH_REPEAT_WINDOW_MS = 6000;
+
 BuddyCoreState coreState = BuddyCoreState::Awake;
 BuddyReaction activeReaction = BuddyReaction::Idle;
+uint32_t lastTouchAt = 0;
+uint8_t touchStreak = 0;
+
+void resetTouchHistory() {
+  lastTouchAt = 0;
+  touchStreak = 0;
+}
 
 void startGenericReaction(uint32_t now, FaceExpression expression,
                           ReactionSound sound) {
@@ -19,6 +28,7 @@ void startGenericReaction(uint32_t now, FaceExpression expression,
 void enterSleep(uint32_t now) {
   coreState = BuddyCoreState::Sleeping;
   activeReaction = BuddyReaction::Idle;
+  resetTouchHistory();
   enterSleepFace(now);
   stopReactionSound();
   playSleepSound();
@@ -36,6 +46,7 @@ void wakeBuddy(uint32_t now) {
 void beginBehaviorEngine(uint32_t now) {
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
+  resetTouchHistory();
   scheduleFaceBehavior(now);
 }
 
@@ -56,8 +67,22 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       }
       break;
     case BuddyEvent::Touch:
-      if (coreState == BuddyCoreState::Awake)
-        startGenericReaction(now, FaceExpression::Happy, ReactionSound::Happy);
+      if (coreState == BuddyCoreState::Awake) {
+        if (touchStreak == 0 ||
+            static_cast<uint32_t>(now - lastTouchAt) >
+                TOUCH_REPEAT_WINDOW_MS) {
+          touchStreak = 1;
+        } else if (touchStreak < UINT8_MAX) {
+          touchStreak++;
+        }
+        lastTouchAt = now;
+
+        const bool repeatedTouch = touchStreak >= 2;
+        startGenericReaction(
+            now,
+            repeatedTouch ? FaceExpression::Curious : FaceExpression::Happy,
+            repeatedTouch ? ReactionSound::Curious : ReactionSound::Happy);
+      }
       break;
     case BuddyEvent::SoundDetected:
       if (coreState == BuddyCoreState::Awake)
