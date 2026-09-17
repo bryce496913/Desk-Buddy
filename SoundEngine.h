@@ -4,6 +4,7 @@
 #include "BehaviorEngine.h"
 
 enum class ReactionSound : uint8_t {
+  None,
   Happy,
   Curious,
   Annoyed,

@@ -244,33 +244,49 @@ void playWakeSound() {
 }
 
 void startReactionSound(uint32_t now, ReactionSound sound) {
-  if (sound == ReactionSound::Happy) {
-    uint8_t variant = selectVariant(HAPPY_VARIANT_COUNT, lastHappyVariant);
-    startSequence(SoundSequence::HappyReaction,
-                  HAPPY_REACTION_SEQUENCES[variant], now);
-  } else if (sound == ReactionSound::Curious) {
-    uint8_t variant = selectVariant(CURIOUS_VARIANT_COUNT, lastCuriousVariant);
-    startSequence(SoundSequence::CuriousReaction,
-                  CURIOUS_REACTION_SEQUENCES[variant], now);
-  } else if (sound == ReactionSound::Annoyed) {
-    uint8_t variant = selectVariant(ANNOYED_VARIANT_COUNT, lastAnnoyedVariant);
-    startSequence(SoundSequence::AnnoyedReaction,
-                  ANNOYED_REACTION_SEQUENCES[variant], now);
-  } else if (sound == ReactionSound::Startled) {
-    uint8_t variant =
-        selectVariant(STARTLED_VARIANT_COUNT, lastStartledVariant);
-    startSequence(SoundSequence::StartledReaction,
-                  STARTLED_REACTION_SEQUENCES[variant], now);
-  } else if (sound == ReactionSound::Suspicious) {
-    uint8_t variant =
-        selectVariant(SUSPICIOUS_VARIANT_COUNT, lastSuspiciousVariant);
-    startSequence(SoundSequence::SuspiciousReaction,
-                  SUSPICIOUS_REACTION_SEQUENCES[variant], now);
-  } else {
-    uint8_t variant =
-        selectVariant(CONFUSED_VARIANT_COUNT, lastConfusedVariant);
-    startSequence(SoundSequence::ConfusedReaction,
-                  CONFUSED_REACTION_SEQUENCES[variant], now);
+  switch (sound) {
+    case ReactionSound::None:
+      stopReactionSound();
+      break;
+    case ReactionSound::Happy: {
+      uint8_t variant = selectVariant(HAPPY_VARIANT_COUNT, lastHappyVariant);
+      startSequence(SoundSequence::HappyReaction,
+                    HAPPY_REACTION_SEQUENCES[variant], now);
+      break;
+    }
+    case ReactionSound::Curious: {
+      uint8_t variant = selectVariant(CURIOUS_VARIANT_COUNT, lastCuriousVariant);
+      startSequence(SoundSequence::CuriousReaction,
+                    CURIOUS_REACTION_SEQUENCES[variant], now);
+      break;
+    }
+    case ReactionSound::Annoyed: {
+      uint8_t variant = selectVariant(ANNOYED_VARIANT_COUNT, lastAnnoyedVariant);
+      startSequence(SoundSequence::AnnoyedReaction,
+                    ANNOYED_REACTION_SEQUENCES[variant], now);
+      break;
+    }
+    case ReactionSound::Startled: {
+      uint8_t variant =
+          selectVariant(STARTLED_VARIANT_COUNT, lastStartledVariant);
+      startSequence(SoundSequence::StartledReaction,
+                    STARTLED_REACTION_SEQUENCES[variant], now);
+      break;
+    }
+    case ReactionSound::Suspicious: {
+      uint8_t variant =
+          selectVariant(SUSPICIOUS_VARIANT_COUNT, lastSuspiciousVariant);
+      startSequence(SoundSequence::SuspiciousReaction,
+                    SUSPICIOUS_REACTION_SEQUENCES[variant], now);
+      break;
+    }
+    case ReactionSound::Confused: {
+      uint8_t variant =
+          selectVariant(CONFUSED_VARIANT_COUNT, lastConfusedVariant);
+      startSequence(SoundSequence::ConfusedReaction,
+                    CONFUSED_REACTION_SEQUENCES[variant], now);
+      break;
+    }
   }
 }
 

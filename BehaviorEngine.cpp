@@ -7,6 +7,8 @@
 namespace {
 constexpr uint32_t TOUCH_REPEAT_WINDOW_MS = 6000;
 constexpr uint32_t SOUND_REPEAT_WINDOW_MS = 10000;
+constexpr uint32_t IDLE_PERSONALITY_MIN_MS = 20000;
+constexpr uint32_t IDLE_PERSONALITY_MAX_MS = 40001;
 
 BuddyCoreState coreState = BuddyCoreState::Awake;
 BuddyReaction activeReaction = BuddyReaction::Idle;
@@ -14,6 +16,26 @@ uint32_t lastTouchAt = 0;
 uint8_t touchStreak = 0;
 uint32_t lastSoundAt = 0;
 uint8_t soundStreak = 0;
+uint32_t nextIdlePersonalityAt = 0;
+bool idlePersonalityScheduled = false;
+bool autonomousReactionActive = false;
+
+bool timeReached(uint32_t now, uint32_t deadline) {
+  return static_cast<int32_t>(now - deadline) >= 0;
+}
+
+void scheduleNextIdlePersonality(uint32_t now) {
+  nextIdlePersonalityAt =
+      now + static_cast<uint32_t>(
+                random(IDLE_PERSONALITY_MIN_MS, IDLE_PERSONALITY_MAX_MS));
+  idlePersonalityScheduled = true;
+}
+
+void disableIdlePersonality() {
+  nextIdlePersonalityAt = 0;
+  idlePersonalityScheduled = false;
+  autonomousReactionActive = false;
+}
 
 void resetTouchHistory() {
   lastTouchAt = 0;
@@ -38,6 +60,7 @@ void enterSleep(uint32_t now) {
   activeReaction = BuddyReaction::Idle;
   resetTouchHistory();
   resetSoundHistory();
+  disableIdlePersonality();
   enterSleepFace(now);
   stopReactionSound();
   playSleepSound();
@@ -47,6 +70,8 @@ void wakeBuddy(uint32_t now) {
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
   resetSoundHistory();
+  autonomousReactionActive = false;
+  scheduleNextIdlePersonality(now);
   wakeFace(now);
   playWakeSound();
   ignoreSoundSensorAfterWake();
@@ -59,12 +84,28 @@ void beginBehaviorEngine(uint32_t now) {
   resetTouchHistory();
   resetSoundHistory();
   scheduleFaceBehavior(now);
+  autonomousReactionActive = false;
+  scheduleNextIdlePersonality(now);
 }
 
 void updateBehaviorEngine(uint32_t now) {
   if (activeReaction == BuddyReaction::Generic && isFaceReactionFinished(now)) {
     activeReaction = BuddyReaction::Idle;
     finishFaceReaction(now);
+    if (autonomousReactionActive) {
+      autonomousReactionActive = false;
+      scheduleNextIdlePersonality(now);
+    }
+  }
+
+  if (coreState == BuddyCoreState::Awake && idlePersonalityScheduled &&
+      timeReached(now, nextIdlePersonalityAt)) {
+    if (activeReaction == BuddyReaction::Idle && !isSoundEngineActive()) {
+      idlePersonalityScheduled = false;
+      processBuddyEvent(BuddyEvent::IdleTimeout, now);
+    } else {
+      scheduleNextIdlePersonality(now);
+    }
   }
 }
 
@@ -79,6 +120,8 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       break;
     case BuddyEvent::Touch:
       if (coreState == BuddyCoreState::Awake) {
+        autonomousReactionActive = false;
+        scheduleNextIdlePersonality(now);
         if (touchStreak == 0 ||
             static_cast<uint32_t>(now - lastTouchAt) >
                 TOUCH_REPEAT_WINDOW_MS) {
@@ -102,6 +145,8 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       break;
     case BuddyEvent::SoundDetected:
       if (coreState == BuddyCoreState::Awake) {
+        autonomousReactionActive = false;
+        scheduleNextIdlePersonality(now);
         if (soundStreak == 0 ||
             static_cast<uint32_t>(now - lastSoundAt) >
                 SOUND_REPEAT_WINDOW_MS) {
@@ -121,6 +166,15 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
           startGenericReaction(now, FaceExpression::Confused,
                                ReactionSound::Confused);
         }
+      }
+      break;
+    case BuddyEvent::IdleTimeout:
+      if (coreState == BuddyCoreState::Awake &&
+          activeReaction == BuddyReaction::Idle && !isSoundEngineActive()) {
+        idlePersonalityScheduled = false;
+        autonomousReactionActive = true;
+        startGenericReaction(now, FaceExpression::Curious,
+                             ReactionSound::None);
       }
       break;
   }
