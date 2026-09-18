@@ -33,6 +33,10 @@ float clampf(float v, float lo, float hi) {
 }
 float lerpf(float a, float b, float t) { return a + (b - a) * t; }
 
+bool timeReached(uint32_t now, uint32_t deadline) {
+  return static_cast<int32_t>(now - deadline) >= 0;
+}
+
 const int leftEyeX = 86;
 const int rightEyeX = 194;
 const int eyeY = 120;
@@ -230,7 +234,7 @@ void startFaceReaction(uint32_t now, FaceExpression expression) {
   pupilTargetY = 0;
   drowsyUntil = 0;
 }
-bool isFaceReactionFinished(uint32_t now) { return now >= reactUntil; }
+bool isFaceReactionFinished(uint32_t now) { return timeReached(now, reactUntil); }
 void finishFaceReaction(uint32_t now) {
   activeExpression = FaceExpression::Normal;
   scheduleFaceBehavior(now);
@@ -251,13 +255,14 @@ void wakeFace(uint32_t now) {
 }
 void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction) {
   if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
-      !blinkActive && now >= nextBlinkAt) {
+      !blinkActive && timeReached(now, nextBlinkAt)) {
     blinkActive = true;
     blinkStart = now;
     blinkDuration = random(140, 220);
     scheduleNextBlink(now + blinkDuration);
   }
-  if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle && now >= nextDrowsyAt) {
+  if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
+      timeReached(now, nextDrowsyAt)) {
     drowsyUntil = now + random(1300, 2800);
     scheduleNextDrowsy(now);
   }
@@ -268,7 +273,8 @@ void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction re
     else blinkAmt = sinf(p * 3.1415926f);
   }
   float sleepyAmt = 0.0f;
-  if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle && now < drowsyUntil)
+  if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
+      !timeReached(now, drowsyUntil))
     sleepyAmt = 0.25f + 0.08f * (0.5f + 0.5f * sinf(now * 0.004f));
   float targetLid = 0.0f;
   if (coreState == BuddyCoreState::Sleeping) targetLid = 1.0f;
@@ -280,10 +286,10 @@ void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction re
     pupilTargetX = 0; pupilTargetY = 0;
   } else if (coreState == BuddyCoreState::Sleeping) {
     pupilTargetX = 0; pupilTargetY = 10;
-  } else if (now >= nextLookAt) {
+  } else if (timeReached(now, nextLookAt)) {
     pupilTargetX = random(-16, 17);
     pupilTargetY = random(-10, 13);
-    if (now < drowsyUntil) pupilTargetY = random(6, 14);
+    if (!timeReached(now, drowsyUntil)) pupilTargetY = random(6, 14);
     scheduleNextLook(now);
   }
   float follow = reaction == BuddyReaction::Generic ? 0.22f : 0.08f;
