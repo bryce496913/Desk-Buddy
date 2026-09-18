@@ -216,8 +216,12 @@ BuddyCoreState getBuddyCoreState() { return coreState; }
 BuddyReaction getBuddyReaction() { return activeReaction; }
 
 #if DESK_BUDDY_DIAGNOSTICS
-bool triggerDiagnosticReaction(DiagnosticReaction reaction, uint32_t now) {
+bool triggerDiagnosticReaction(DiagnosticReaction reaction,
+                               DiagnosticSoundVariant variant, uint32_t now,
+                               uint8_t &selectedVariantIndex) {
   if (coreState != BuddyCoreState::Awake) return false;
+
+  selectedVariantIndex = DIAGNOSTIC_RANDOM_VARIANT;
 
   autonomousReactionActive = false;
   disableIdlePersonality();
@@ -263,7 +267,17 @@ bool triggerDiagnosticReaction(DiagnosticReaction reaction, uint32_t now) {
       break;
   }
 
-  startGenericReaction(now, expression, sound);
+  uint8_t requestedVariantIndex = DIAGNOSTIC_RANDOM_VARIANT;
+  if (variant != DiagnosticSoundVariant::Random) {
+    requestedVariantIndex = static_cast<uint8_t>(variant) - 1;
+  }
+  if (!startDiagnosticReactionSound(now, sound, requestedVariantIndex,
+                                    selectedVariantIndex)) {
+    return false;
+  }
+
+  activeReaction = BuddyReaction::Generic;
+  startFaceReaction(now, expression);
   return true;
 }
 #endif

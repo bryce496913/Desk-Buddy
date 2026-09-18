@@ -24,6 +24,12 @@ enum class DiagnosticReaction : uint8_t {
   Confused,
   Daydreaming
 };
+enum class DiagnosticSoundVariant : uint8_t {
+  Random,
+  Variant1,
+  Variant2,
+  Variant3
+};
 #endif
 
 void beginBehaviorEngine(uint32_t now);
@@ -33,5 +39,7 @@ BuddyCoreState getBuddyCoreState();
 BuddyReaction getBuddyReaction();
 
 #if DESK_BUDDY_DIAGNOSTICS
-bool triggerDiagnosticReaction(DiagnosticReaction reaction, uint32_t now);
+bool triggerDiagnosticReaction(DiagnosticReaction reaction,
+                               DiagnosticSoundVariant variant, uint32_t now,
+                               uint8_t &selectedVariantIndex);
 #endif
