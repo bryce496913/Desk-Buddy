@@ -290,6 +290,71 @@ void startReactionSound(uint32_t now, ReactionSound sound) {
   }
 }
 
+#if DESK_BUDDY_DIAGNOSTICS
+bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,
+                                  uint8_t requestedVariantIndex,
+                                  uint8_t &selectedVariantIndex) {
+  selectedVariantIndex = DIAGNOSTIC_RANDOM_VARIANT;
+
+  const SequenceDefinition *sequences = nullptr;
+  SoundSequence sequence = SoundSequence::None;
+  uint8_t variantCount = 0;
+  uint8_t *lastVariant = nullptr;
+
+  switch (sound) {
+    case ReactionSound::None:
+      stopReactionSound();
+      return true;
+    case ReactionSound::Happy:
+      sequences = HAPPY_REACTION_SEQUENCES;
+      sequence = SoundSequence::HappyReaction;
+      variantCount = HAPPY_VARIANT_COUNT;
+      lastVariant = &lastHappyVariant;
+      break;
+    case ReactionSound::Curious:
+      sequences = CURIOUS_REACTION_SEQUENCES;
+      sequence = SoundSequence::CuriousReaction;
+      variantCount = CURIOUS_VARIANT_COUNT;
+      lastVariant = &lastCuriousVariant;
+      break;
+    case ReactionSound::Annoyed:
+      sequences = ANNOYED_REACTION_SEQUENCES;
+      sequence = SoundSequence::AnnoyedReaction;
+      variantCount = ANNOYED_VARIANT_COUNT;
+      lastVariant = &lastAnnoyedVariant;
+      break;
+    case ReactionSound::Startled:
+      sequences = STARTLED_REACTION_SEQUENCES;
+      sequence = SoundSequence::StartledReaction;
+      variantCount = STARTLED_VARIANT_COUNT;
+      lastVariant = &lastStartledVariant;
+      break;
+    case ReactionSound::Suspicious:
+      sequences = SUSPICIOUS_REACTION_SEQUENCES;
+      sequence = SoundSequence::SuspiciousReaction;
+      variantCount = SUSPICIOUS_VARIANT_COUNT;
+      lastVariant = &lastSuspiciousVariant;
+      break;
+    case ReactionSound::Confused:
+      sequences = CONFUSED_REACTION_SEQUENCES;
+      sequence = SoundSequence::ConfusedReaction;
+      variantCount = CONFUSED_VARIANT_COUNT;
+      lastVariant = &lastConfusedVariant;
+      break;
+  }
+
+  if (requestedVariantIndex == DIAGNOSTIC_RANDOM_VARIANT) {
+    selectedVariantIndex = selectVariant(variantCount, *lastVariant);
+  } else {
+    if (requestedVariantIndex >= variantCount) return false;
+    selectedVariantIndex = requestedVariantIndex;
+  }
+
+  startSequence(sequence, sequences[selectedVariantIndex], now);
+  return true;
+}
+#endif
+
 void stopReactionSound() {
   if (isReactionSequence(currentSequence)) stopSequence();
 }
