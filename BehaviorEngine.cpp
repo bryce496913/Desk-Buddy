@@ -32,10 +32,16 @@ bool timeReached(uint32_t now, uint32_t deadline) {
 }
 
 void scheduleNextIdlePersonality(uint32_t now) {
+#if DESK_BUDDY_DIAGNOSTICS
+  (void)now;
+  nextIdlePersonalityAt = 0;
+  idlePersonalityScheduled = false;
+#else
   nextIdlePersonalityAt =
       now + static_cast<uint32_t>(
                 random(IDLE_PERSONALITY_MIN_MS, IDLE_PERSONALITY_MAX_MS));
   idlePersonalityScheduled = true;
+#endif
 }
 
 void disableIdlePersonality() {
@@ -208,3 +214,56 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
 
 BuddyCoreState getBuddyCoreState() { return coreState; }
 BuddyReaction getBuddyReaction() { return activeReaction; }
+
+#if DESK_BUDDY_DIAGNOSTICS
+bool triggerDiagnosticReaction(DiagnosticReaction reaction, uint32_t now) {
+  if (coreState != BuddyCoreState::Awake) return false;
+
+  autonomousReactionActive = false;
+  disableIdlePersonality();
+
+  if (reaction == DiagnosticReaction::Normal) {
+    activeReaction = BuddyReaction::Idle;
+    stopReactionSound();
+    finishFaceReaction(now);
+    return true;
+  }
+
+  FaceExpression expression = FaceExpression::Normal;
+  ReactionSound sound = ReactionSound::None;
+  switch (reaction) {
+    case DiagnosticReaction::Happy:
+      expression = FaceExpression::Happy;
+      sound = ReactionSound::Happy;
+      break;
+    case DiagnosticReaction::Curious:
+      expression = FaceExpression::Curious;
+      sound = ReactionSound::Curious;
+      break;
+    case DiagnosticReaction::Annoyed:
+      expression = FaceExpression::Annoyed;
+      sound = ReactionSound::Annoyed;
+      break;
+    case DiagnosticReaction::Startled:
+      expression = FaceExpression::Startled;
+      sound = ReactionSound::Startled;
+      break;
+    case DiagnosticReaction::Suspicious:
+      expression = FaceExpression::Suspicious;
+      sound = ReactionSound::Suspicious;
+      break;
+    case DiagnosticReaction::Confused:
+      expression = FaceExpression::Confused;
+      sound = ReactionSound::Confused;
+      break;
+    case DiagnosticReaction::Daydreaming:
+      expression = FaceExpression::Daydreaming;
+      break;
+    case DiagnosticReaction::Normal:
+      break;
+  }
+
+  startGenericReaction(now, expression, sound);
+  return true;
+}
+#endif

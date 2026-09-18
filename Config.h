@@ -2,6 +2,10 @@
 
 #include <Arduino.h>
 
+#ifndef DESK_BUDDY_DIAGNOSTICS
+#define DESK_BUDDY_DIAGNOSTICS 0
+#endif
+
 constexpr uint8_t TFT_CS = 17;
 constexpr uint8_t TFT_DC = 20;
 constexpr uint8_t TFT_RST = 21;

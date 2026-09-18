@@ -1,6 +1,8 @@
 #include <Arduino.h>
 
 #include "BehaviorEngine.h"
+#include "Config.h"
+#include "Diagnostics.h"
 #include "FaceRenderer.h"
 #include "Inputs.h"
 #include "SoundEngine.h"
@@ -16,6 +18,10 @@ void setup() {
 
   randomSeed(micros());
   beginBehaviorEngine(millis());
+
+#if DESK_BUDDY_DIAGNOSTICS
+  beginDiagnostics();
+#endif
 
   Serial.println("TTP223 touch enabled on GP5 (VCC: VBUS)");
   playBootSound();
@@ -35,6 +41,10 @@ void loop() {
   InputEvents inputEvents = updateInputs(now);
   if (inputEvents.touch) processBuddyEvent(BuddyEvent::Touch, now);
   if (inputEvents.button) processBuddyEvent(BuddyEvent::ButtonPressed, now);
+
+#if DESK_BUDDY_DIAGNOSTICS
+  updateDiagnostics(now);
+#endif
 
   updateBehaviorEngine(now);
   updateFaceRenderer(now, getBuddyCoreState(), getBuddyReaction());
