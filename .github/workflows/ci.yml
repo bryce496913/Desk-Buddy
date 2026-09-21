@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  ARDUINO_PICO_INDEX_URL: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+  ARDUINO_PICO_VERSION: 4.3.1
+  ADAFRUIT_GFX_VERSION: 1.12.1
+  ADAFRUIT_ST7735_VERSION: 1.11.0
+  PICO_FQBN: rp2040:rp2040:rpipico
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run host regression tests
+        run: |
+          test -x tests/run_host_tests.sh
+          ./tests/run_host_tests.sh
+
+  pico-build:
+    name: Pico build (${{ matrix.configuration }})
+    needs: host-tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - configuration: production
+            extra_flags: ''
+          - configuration: diagnostics
+            extra_flags: -DDESK_BUDDY_DIAGNOSTICS=1
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install pinned Pico core and display libraries
+        run: |
+          arduino-cli core update-index \
+            --additional-urls "${ARDUINO_PICO_INDEX_URL}"
+          arduino-cli core install "rp2040:rp2040@${ARDUINO_PICO_VERSION}" \
+            --additional-urls "${ARDUINO_PICO_INDEX_URL}"
+          arduino-cli lib install \
+            "Adafruit GFX Library@${ADAFRUIT_GFX_VERSION}" \
+            "Adafruit ST7735 and ST7789 Library@${ADAFRUIT_ST7735_VERSION}"
+
+      - name: Verify Raspberry Pi Pico board is installed
+        run: arduino-cli board details --fqbn "${PICO_FQBN}"
+
+      - name: Stage firmware sketch
+        run: |
+          rm -rf /tmp/DeskBuddy
+          mkdir -p /tmp/DeskBuddy
+          find . -maxdepth 1 -type f \
+            \( -name 'DeskBuddy.ino' -o -name '*.cpp' -o -name '*.h' \) \
+            -exec cp '{}' /tmp/DeskBuddy/ \;
+
+      - name: Compile ${{ matrix.configuration }} firmware
+        env:
+          EXTRA_FLAGS: ${{ matrix.extra_flags }}
+        run: |
+          compile_args=(
+            --fqbn "${PICO_FQBN}"
+            --warnings all
+            --build-path "/tmp/DeskBuddy-build-${{ matrix.configuration }}"
+          )
+          if [[ -n "${EXTRA_FLAGS}" ]]; then
+            compile_args+=(--build-property "compiler.cpp.extra_flags=${EXTRA_FLAGS}")
+          fi
+          arduino-cli compile "${compile_args[@]}" /tmp/DeskBuddy
