@@ -44,7 +44,8 @@ run_test "diagnostic BehaviorEngine" diagnostics_behavior \
 
 run_test "diagnostic Serial parser" diagnostics_parser \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
-  "${REPO_ROOT}/tests/diagnostics_parser_test.cpp"
+  "${REPO_ROOT}/tests/diagnostics_parser_test.cpp" \
+  "${REPO_ROOT}/Diagnostics.cpp"
 
 run_test "diagnostic SoundEngine forced variants" sound_diagnostic_variants \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
