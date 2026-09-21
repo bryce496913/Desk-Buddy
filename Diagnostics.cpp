@@ -3,6 +3,7 @@
 #if DESK_BUDDY_DIAGNOSTICS
 
 #include "BehaviorEngine.h"
+#include "SoundEngine.h"
 
 namespace {
 DiagnosticSoundVariant soundVariant = DiagnosticSoundVariant::Random;

@@ -3,8 +3,8 @@
 #include <string>
 
 #include "Arduino.h"
+#include "Diagnostics.h"
 #include "BehaviorEngine.h"
-#include "SoundEngine.h"
 
 HardwareSerial Serial;
 
@@ -24,14 +24,12 @@ bool triggerDiagnosticReaction(DiagnosticReaction reaction,
   triggerCount++;
   selectedVariantIndex = reaction == DiagnosticReaction::Daydreaming ||
                                  reaction == DiagnosticReaction::Normal
-      ? DIAGNOSTIC_RANDOM_VARIANT
+      ? UINT8_MAX
       : (variant == DiagnosticSoundVariant::Random
              ? 2
              : static_cast<uint8_t>(variant) - 1);
   return true;
 }
-
-#include "../Diagnostics.cpp"
 
 int main() {
   beginDiagnostics();
