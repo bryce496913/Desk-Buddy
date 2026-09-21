@@ -8,8 +8,14 @@
 constexpr uint8_t LOW = 0;
 constexpr uint8_t HIGH = 1;
 constexpr uint8_t OUTPUT = 1;
+constexpr uint8_t INPUT = 0;
+constexpr int FALLING = 2;
 
 void pinMode(uint8_t pin, uint8_t mode);
+int digitalPinToInterrupt(uint8_t pin);
+void attachInterrupt(int interrupt, void (*callback)(), int mode);
+void noInterrupts();
+void interrupts();
 void noTone(uint8_t pin);
 void tone(uint8_t pin, unsigned int frequency);
 uint32_t millis();
