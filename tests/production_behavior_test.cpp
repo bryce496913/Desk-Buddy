@@ -43,11 +43,13 @@ void resetObservations() {
 void beginAt(uint32_t now) {
   resetObservations();
   beginBehaviorEngine(now);
+  assert(getBuddyMood() == BuddyMood::Calm);
   assert(getBuddyCoreState() == BuddyCoreState::Awake);
   assert(getBuddyReaction() == BuddyReaction::Idle);
 }
 
 void expectReaction(FaceExpression expression, ReactionSound sound) {
+  assert(getBuddyMood() == BuddyMood::Calm);
   assert(getBuddyReaction() == BuddyReaction::Generic);
   assert(requestedExpression == expression);
   assert(requestedSound == sound);
@@ -59,6 +61,7 @@ void finishReactionAt(uint32_t now) {
   updateBehaviorEngine(now);
   assert(getBuddyReaction() == BuddyReaction::Idle);
   assert(faceReactionFinishes > 0);
+  assert(getBuddyMood() == BuddyMood::Calm);
 }
 
 void testTouchWindowAndSaturation() {
@@ -145,6 +148,7 @@ void testSleepWakeAndHistoryReset() {
   const int startsBeforeSleep = faceReactionStarts;
   processBuddyEvent(BuddyEvent::ButtonPressed, 70);
   assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
+  assert(getBuddyMood() == BuddyMood::Calm);
   assert(getBuddyReaction() == BuddyReaction::Idle);
   assert(sleepFaceEntries == 1);
   assert(sleepSoundRequests == 1);
@@ -159,6 +163,7 @@ void testSleepWakeAndHistoryReset() {
   processBuddyEvent(BuddyEvent::ButtonPressed, 100);
   assert(getBuddyCoreState() == BuddyCoreState::Awake);
   assert(wakeFaceRequests == 1);
+  assert(getBuddyMood() == BuddyMood::Calm);
   assert(wakeSoundRequests == 1);
   assert(wakeSensorIgnores == 1);
   processBuddyEvent(BuddyEvent::Touch, 110);
@@ -178,6 +183,7 @@ void testAutonomousPersonalityAndHistories() {
   assert(getBuddyReaction() == BuddyReaction::Generic);
   assert(requestedExpression == FaceExpression::Curious ||
          requestedExpression == FaceExpression::Daydreaming);
+  assert(getBuddyMood() == BuddyMood::Calm);
   assert(requestedSound == ReactionSound::None);
   assert(!soundEngineActive);
   finishReactionAt(21500);
@@ -189,6 +195,7 @@ void testAutonomousPersonalityAndHistories() {
   assert(faceReactionStarts == startsAfterCompletion);
   updateBehaviorEngine(41500);
   assert(faceReactionStarts == startsAfterCompletion + 1);
+  assert(getBuddyMood() == BuddyMood::Calm);
   finishReactionAt(41600);
 
   // Autonomous reactions do not contribute to either interaction streak.

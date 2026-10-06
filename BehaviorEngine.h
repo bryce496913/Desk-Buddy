@@ -13,6 +13,14 @@ enum class BuddyEvent : uint8_t {
 };
 enum class BuddyReaction : uint8_t { Idle, Generic };
 
+// Longer-lived disposition, independent of sleep state and transient reactions.
+enum class BuddyMood : uint8_t {
+  Calm,
+  Engaged,
+  Grumpy,
+  Sleepy
+};
+
 #if DESK_BUDDY_DIAGNOSTICS
 enum class DiagnosticReaction : uint8_t {
   Normal,
@@ -37,6 +45,7 @@ void updateBehaviorEngine(uint32_t now);
 void processBuddyEvent(BuddyEvent event, uint32_t now);
 BuddyCoreState getBuddyCoreState();
 BuddyReaction getBuddyReaction();
+BuddyMood getBuddyMood();
 
 #if DESK_BUDDY_DIAGNOSTICS
 bool triggerDiagnosticReaction(DiagnosticReaction reaction,
