@@ -171,13 +171,15 @@ CI validates the following pinned environment:
 | Component | Version |
 | --- | --- |
 | Arduino-Pico core (`rp2040:rp2040`) | **4.3.1** |
-| Adafruit GFX Library | **1.12.1** |
+| Adafruit GFX Library | **1.12.6** |
 | Adafruit ST7735 and ST7789 Library | **1.11.0** |
+| Adafruit BusIO | **1.17.4** |
 | Target FQBN | **`rp2040:rp2040:rpipico`** |
 
-Adafruit BusIO is installed as a library dependency; the workflow does **not**
-pin it explicitly. The CI source of truth for build versions is
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+The workflow installs each library at the version above without allowing later
+library installs to replace its dependencies, then verifies the installed core
+and library versions before compiling. The CI source of truth for build versions
+is [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ### Arduino IDE
 
@@ -185,9 +187,8 @@ pin it explicitly. The CI source of truth for build versions is
    Manager URLs**:
    `https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`
 2. Install version **4.3.1** of the `rp2040` platform in Boards Manager.
-3. Install **Adafruit GFX Library 1.12.1** and **Adafruit ST7735 and ST7789
-   Library 1.11.0** in Library Manager. Allow the IDE to install required
-   dependencies such as Adafruit BusIO.
+3. Install **Adafruit BusIO 1.17.4**, **Adafruit GFX Library 1.12.6**, and
+   **Adafruit ST7735 and ST7789 Library 1.11.0** in Library Manager.
 4. Open `DeskBuddy.ino`, select **Raspberry Pi Pico**, choose the correct port,
    and compile/upload.
 
@@ -200,9 +201,10 @@ INDEX_URL=https://github.com/earlephilhower/arduino-pico/releases/download/globa
 
 arduino-cli core update-index --additional-urls "$INDEX_URL"
 arduino-cli core install rp2040:rp2040@4.3.1 --additional-urls "$INDEX_URL"
+arduino-cli lib install "Adafruit BusIO@1.17.4"
+arduino-cli lib install "Adafruit GFX Library@1.12.6" --no-deps
 arduino-cli lib install \
-  "Adafruit GFX Library@1.12.1" \
-  "Adafruit ST7735 and ST7789 Library@1.11.0"
+  "Adafruit ST7735 and ST7789 Library@1.11.0" --no-deps
 ```
 
 Arduino requires the sketch directory and primary `.ino` file to share a base
