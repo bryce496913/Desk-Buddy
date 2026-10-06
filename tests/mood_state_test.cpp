@@ -805,6 +805,123 @@ void testSoundUsesOnlyImmediatelyPreviousTouch() {
   expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious, BuddyMood::Engaged);
 }
 
+void testTouchAfterSoundTablesAndScores() {
+  const FaceExpression tapExpressions[][4] = {
+      {FaceExpression::Curious, FaceExpression::Curious, FaceExpression::Annoyed, FaceExpression::Annoyed},
+      {FaceExpression::Curious, FaceExpression::Happy, FaceExpression::Curious, FaceExpression::Curious},
+      {FaceExpression::Curious, FaceExpression::Annoyed, FaceExpression::Annoyed, FaceExpression::Annoyed},
+      {FaceExpression::Curious, FaceExpression::Annoyed, FaceExpression::Annoyed, FaceExpression::Annoyed}};
+  const ReactionSound tapSounds[][4] = {
+      {ReactionSound::Curious, ReactionSound::Curious, ReactionSound::Annoyed, ReactionSound::Annoyed},
+      {ReactionSound::Curious, ReactionSound::Happy, ReactionSound::Curious, ReactionSound::Curious},
+      {ReactionSound::Curious, ReactionSound::Annoyed, ReactionSound::Annoyed, ReactionSound::Annoyed},
+      {ReactionSound::Curious, ReactionSound::Annoyed, ReactionSound::Annoyed, ReactionSound::Annoyed}};
+  for (uint8_t mood = 0; mood < 4; ++mood) {
+    for (uint8_t level = 0; level < 4; ++level) {
+      beginAt();
+      for (uint8_t previous = 0; previous < level; ++previous) {
+        processBuddyEvent(BuddyEvent::TouchTap, 900 + previous);
+      }
+      processBuddyEvent(BuddyEvent::SoundDetected, 1000);
+      setDiagnosticMood(moods[mood], 1000);
+      const DiagnosticMoodState before = getDiagnosticMoodState(1001);
+      processBuddyEvent(BuddyEvent::TouchTap, 1001);
+      const DiagnosticMoodState after = getDiagnosticMoodState(1001);
+      assert(expression == tapExpressions[mood][level]);
+      assert(sound == tapSounds[mood][level]);
+      assert(after.engagementScore == before.engagementScore + (level == 0 ? 20 : level == 1 ? 25 : 5));
+      assert(after.irritationScore == before.irritationScore + (level >= 2 ? 25 : 0));
+      assert(after.inactivityMs == 0);
+      assert(after.mood == (moods[mood] == BuddyMood::Sleepy ? BuddyMood::Calm : moods[mood]));
+      const auto context = getDiagnosticRecentInteractionContext(1001);
+      assert(context.type == DiagnosticRecentInteractionType::TouchTap);
+      assert(context.ageMs == 0 && context.recent);
+    }
+
+    beginAt();
+    processBuddyEvent(BuddyEvent::SoundDetected, 1000);
+    setDiagnosticMood(moods[mood], 1000);
+    const DiagnosticMoodState before = getDiagnosticMoodState(1001);
+    processBuddyEvent(BuddyEvent::TouchHold, 1001);
+    const DiagnosticMoodState after = getDiagnosticMoodState(1001);
+    expectReaction(FaceExpression::Happy, ReactionSound::Happy,
+                   moods[mood] == BuddyMood::Engaged ? BuddyMood::Engaged : BuddyMood::Calm);
+    assert(after.engagementScore == before.engagementScore + 30);
+    assert(after.irritationScore == (before.irritationScore >= 15 ? before.irritationScore - 15 : 0));
+    assert(after.inactivityMs == 0);
+    const auto context = getDiagnosticRecentInteractionContext(1001);
+    assert(context.type == DiagnosticRecentInteractionType::TouchHold);
+    assert(context.ageMs == 0 && context.recent);
+  }
+
+  // Positive reassurance does not erase a naturally strong Grumpy mood.
+  beginAt();
+  buildTouchMood(900, 5);  // 60 engagement, 75 irritation.
+  processBuddyEvent(BuddyEvent::SoundDetected, 1000);
+  processBuddyEvent(BuddyEvent::TouchHold, 1001);
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Grumpy);
+  const auto state = getDiagnosticMoodState(1001);
+  assert(state.engagementScore == 95 && state.irritationScore == 60);
+}
+
+void testTouchSoundContextBoundaryAndRollover() {
+  const uint32_t anchors[] = {1000, std::numeric_limits<uint32_t>::max() - 1000};
+  for (uint32_t anchor : anchors) {
+    for (uint32_t age : {5000u, 5001u}) {
+      for (BuddyEvent touch : {BuddyEvent::TouchTap, BuddyEvent::TouchHold}) {
+        for (BuddyMood mood : moods) {
+          beginAt(anchor);
+          processBuddyEvent(BuddyEvent::SoundDetected, anchor);
+          setDiagnosticMood(mood, anchor);  // Preserve Sound memory.
+          processBuddyEvent(touch, anchor + age);
+          const bool recent = age == 5000;
+          const bool happy = touch == BuddyEvent::TouchHold
+              ? recent || mood == BuddyMood::Calm || mood == BuddyMood::Engaged
+              : !recent && (mood == BuddyMood::Calm || mood == BuddyMood::Engaged);
+          assert(expression == (happy ? FaceExpression::Happy : FaceExpression::Curious));
+          assert(sound == (happy ? ReactionSound::Happy : ReactionSound::Curious));
+        }
+      }
+    }
+  }
+}
+
+void testTouchSoundContextOneStepAndIndependentHistories() {
+  beginAt();
+  processBuddyEvent(BuddyEvent::SoundDetected, 1000);
+  processBuddyEvent(BuddyEvent::TouchHold, 1001);
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
+  processBuddyEvent(BuddyEvent::TouchTap, 1002);
+  // Previous Hold replaces Sound: first Tap uses baseline Calm Happy.
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
+  assert(getDiagnosticMoodState(1002).engagementScore == 55);
+
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchTap, 1000);
+  processBuddyEvent(BuddyEvent::SoundDetected, 1001);
+  setDiagnosticMood(BuddyMood::Engaged, 1001);
+  processBuddyEvent(BuddyEvent::TouchTap, 1002);
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);  // Tap #2.
+  assert(getDiagnosticMoodState(1002).engagementScore == 65);
+
+  beginAt();
+  processBuddyEvent(BuddyEvent::SoundDetected, 1000);
+  processBuddyEvent(BuddyEvent::TouchHold, 1001);
+  setDiagnosticMood(BuddyMood::Grumpy, 1001);
+  processBuddyEvent(BuddyEvent::SoundDetected, 1002);
+  // Sound #2 keeps its history and uses the unchanged recent-Hold table.
+  expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious, BuddyMood::Grumpy);
+
+  // Sound must not refresh the Tap window.
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchTap, 1000);
+  processBuddyEvent(BuddyEvent::SoundDetected, 6000);
+  setDiagnosticMood(BuddyMood::Calm, 6000);
+  processBuddyEvent(BuddyEvent::TouchTap, 7001);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Calm);
+  assert(getDiagnosticMoodState(7001).engagementScore == 20);  // Tap #1, not #2.
+}
+
 void testFirstSoundComparisonAndThresholdCrossing() {
   const FaceExpression expressions[] = {FaceExpression::Startled,
       FaceExpression::Curious, FaceExpression::Suspicious, FaceExpression::Startled};
@@ -946,6 +1063,9 @@ int main() {
   testRecentTouchSoundTables();
   testRecentTouchSoundBoundaryAndRollover();
   testSoundUsesOnlyImmediatelyPreviousTouch();
+  testTouchAfterSoundTablesAndScores();
+  testTouchSoundContextBoundaryAndRollover();
+  testTouchSoundContextOneStepAndIndependentHistories();
   testFirstSoundComparisonAndThresholdCrossing();
   testSleepySecondSoundUsesArrivalMood();
   testDirectDiagnosticReactionsIgnoreMoodContext();

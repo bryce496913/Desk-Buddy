@@ -118,7 +118,7 @@ void testIndependentHistoriesAndReplacement() {
   processBuddyEvent(BuddyEvent::SoundDetected, 120);
   expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious);
   processBuddyEvent(BuddyEvent::TouchTap, 130);
-  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
 
   // A same-type interaction replaces an unfinished Generic reaction.
   beginAt(200);
