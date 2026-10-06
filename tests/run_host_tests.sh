@@ -42,6 +42,11 @@ run_test "diagnostic BehaviorEngine" diagnostics_behavior \
   "${REPO_ROOT}/tests/diagnostics_behavior_test.cpp" \
   "${REPO_ROOT}/BehaviorEngine.cpp"
 
+run_test "BuddyMood state" mood_state \
+  -DDESK_BUDDY_DIAGNOSTICS=1 \
+  "${REPO_ROOT}/tests/mood_state_test.cpp" \
+  "${REPO_ROOT}/BehaviorEngine.cpp"
+
 # Link Diagnostics.cpp separately so missing direct includes fail as they do in Arduino.
 run_test "diagnostic Serial parser" diagnostics_parser \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
