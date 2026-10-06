@@ -49,27 +49,29 @@ void beginAt(uint32_t now) {
 }
 
 void expectReaction(FaceExpression expression, ReactionSound sound) {
-  assert(getBuddyMood() == BuddyMood::Calm);
   assert(getBuddyReaction() == BuddyReaction::Generic);
   assert(requestedExpression == expression);
   assert(requestedSound == sound);
 }
 
 void finishReactionAt(uint32_t now) {
+  const BuddyMood moodBeforeCompletion = getBuddyMood();
   faceReactionFinished = true;
   soundEngineActive = false;
   updateBehaviorEngine(now);
   assert(getBuddyReaction() == BuddyReaction::Idle);
   assert(faceReactionFinishes > 0);
-  assert(getBuddyMood() == BuddyMood::Calm);
+  assert(getBuddyMood() == moodBeforeCompletion);
 }
 
 void testTouchWindowAndSaturation() {
   beginAt(0);
   processBuddyEvent(BuddyEvent::Touch, 100);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  assert(getBuddyMood() == BuddyMood::Calm);
   processBuddyEvent(BuddyEvent::Touch, 6100);  // Exactly 6000 ms is recent.
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
+  assert(getBuddyMood() == BuddyMood::Engaged);
   processBuddyEvent(BuddyEvent::Touch, 12099);
   expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed);
   processBuddyEvent(BuddyEvent::Touch, 18099);
@@ -78,8 +80,10 @@ void testTouchWindowAndSaturation() {
   // Further recent touches stay at the saturated Annoyed level.
   processBuddyEvent(BuddyEvent::Touch, 18100);
   expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed);
+  assert(getBuddyMood() == BuddyMood::Grumpy);
   processBuddyEvent(BuddyEvent::Touch, 24101);  // More than 6000 ms later.
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  assert(getBuddyMood() == BuddyMood::Grumpy);
 }
 
 void testSoundWindowAndSaturation() {
@@ -148,7 +152,7 @@ void testSleepWakeAndHistoryReset() {
   const int startsBeforeSleep = faceReactionStarts;
   processBuddyEvent(BuddyEvent::ButtonPressed, 70);
   assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
-  assert(getBuddyMood() == BuddyMood::Calm);
+  assert(getBuddyMood() == BuddyMood::Engaged);
   assert(getBuddyReaction() == BuddyReaction::Idle);
   assert(sleepFaceEntries == 1);
   assert(sleepSoundRequests == 1);
@@ -163,7 +167,7 @@ void testSleepWakeAndHistoryReset() {
   processBuddyEvent(BuddyEvent::ButtonPressed, 100);
   assert(getBuddyCoreState() == BuddyCoreState::Awake);
   assert(wakeFaceRequests == 1);
-  assert(getBuddyMood() == BuddyMood::Calm);
+  assert(getBuddyMood() == BuddyMood::Engaged);
   assert(wakeSoundRequests == 1);
   assert(wakeSensorIgnores == 1);
   processBuddyEvent(BuddyEvent::Touch, 110);
@@ -229,6 +233,28 @@ void testInteractionPostponesAutonomy() {
   assert(faceReactionStarts == 1);
   updateBehaviorEngine(139999);
   assert(faceReactionStarts == 2);
+}
+
+void testAutonomyPreservesAccumulatedMood() {
+  const int touchCounts[] = {2, 5};
+  for (int touchCount : touchCounts) {
+    beginAt(0);
+    for (int index = 0; index < touchCount; ++index) {
+      processBuddyEvent(BuddyEvent::Touch, 100 + index);
+    }
+    const BuddyMood mood = touchCount == 2 ? BuddyMood::Engaged : BuddyMood::Grumpy;
+    assert(getBuddyMood() == mood);
+    finishReactionAt(110);
+    // Last touch schedules the deterministic autonomous deadline.
+    updateBehaviorEngine(20099 + touchCount);
+    assert(getBuddyReaction() == BuddyReaction::Generic);
+    assert(requestedExpression == FaceExpression::Curious ||
+           requestedExpression == FaceExpression::Daydreaming);
+    assert(requestedSound == ReactionSound::None);
+    assert(getBuddyMood() == mood);
+    finishReactionAt(20110);
+    assert(getBuddyMood() == mood);
+  }
 }
 
 void testSleepSuppressesAutonomy() {
@@ -321,6 +347,7 @@ int main() {
   testSleepWakeAndHistoryReset();
   testAutonomousPersonalityAndHistories();
   testInteractionPostponesAutonomy();
+  testAutonomyPreservesAccumulatedMood();
   testSleepSuppressesAutonomy();
   testRolloverSafeTiming();
   return 0;
