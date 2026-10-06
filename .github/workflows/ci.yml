@@ -38,7 +38,7 @@ jobs:
       matrix:
         include:
           - configuration: production
-            extra_flags: ''
+            extra_flags: -DDESK_BUDDY_DIAGNOSTICS=0
           - configuration: diagnostics
             extra_flags: -DDESK_BUDDY_DIAGNOSTICS=1
 
@@ -48,6 +48,8 @@ jobs:
 
       - name: Install Arduino CLI
         uses: arduino/setup-arduino-cli@v2
+        with:
+          version: '1.3.1'
 
       - name: Install pinned Pico core and display libraries
         run: |
@@ -76,11 +78,11 @@ jobs:
               library_data = json.load(file)
 
           installed_cores = {
-              platform["id"]: platform["installed"]
+              platform["id"]: platform["installed_version"]
               for platform in core_data["platforms"]
           }
           installed_libraries = {
-              item["library"]["name"]: item["release"]["version"]
+              item["library"]["name"]: item["library"]["version"]
               for item in library_data["installed_libraries"]
           }
           expected = {
@@ -128,6 +130,8 @@ jobs:
         env:
           EXTRA_FLAGS: ${{ matrix.extra_flags }}
         run: |
+          # Start clean so an earlier build cannot supply a stale UF2.
+          rm -rf "/tmp/DeskBuddy-build-${{ matrix.configuration }}"
           compile_args=(
             --fqbn "${PICO_FQBN}"
             --warnings all
@@ -137,3 +141,50 @@ jobs:
             compile_args+=(--build-property "compiler.cpp.extra_flags=${EXTRA_FLAGS}")
           fi
           arduino-cli compile "${compile_args[@]}" /tmp/DeskBuddy
+
+      - name: Package production UF2
+        if: matrix.configuration == 'production'
+        env:
+          BUILD_DIR: /tmp/DeskBuddy-build-production
+          ARTIFACT_DIR: ${{ runner.temp }}/desk-buddy-production-firmware
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import shutil
+
+          candidates = sorted(Path(os.environ["BUILD_DIR"]).rglob("*.uf2"))
+          candidates = [path for path in candidates if path.is_file()]
+          if len(candidates) != 1:
+              raise SystemExit(f"Expected exactly one production UF2, found {len(candidates)}: {candidates}")
+          source = candidates[0]
+          if source.stat().st_size == 0:
+              raise SystemExit(f"Production UF2 is empty: {source}")
+          print(f"Production UF2 discovered: {source}")
+          destination = Path(os.environ["ARTIFACT_DIR"])
+          destination.mkdir(parents=True, exist_ok=False)
+          shutil.copyfile(source, destination / "DeskBuddy-production.uf2")
+          metadata = {
+              "git_commit_sha": os.environ["GITHUB_SHA"],
+              "arduino_pico_version": os.environ["ARDUINO_PICO_VERSION"],
+              "adafruit_gfx_version": os.environ["ADAFRUIT_GFX_VERSION"],
+              "adafruit_st7735_st7789_version": os.environ["ADAFRUIT_ST7735_VERSION"],
+              "adafruit_busio_version": os.environ["ADAFRUIT_BUSIO_VERSION"],
+              "fqbn": os.environ["PICO_FQBN"],
+              "diagnostics": "0",
+          }
+          (destination / "BUILD_INFO.txt").write_text(
+              "".join(f"{key}={value}\n" for key, value in metadata.items()),
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload production firmware
+        if: matrix.configuration == 'production'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desk-buddy-production-firmware
+          path: |
+            ${{ runner.temp }}/desk-buddy-production-firmware/DeskBuddy-production.uf2
+            ${{ runner.temp }}/desk-buddy-production-firmware/BUILD_INFO.txt
+          if-no-files-found: error
