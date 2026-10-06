@@ -9,6 +9,9 @@
 static_assert(DESK_BUDDY_DIAGNOSTICS == 0,
               "production behavior test must compile with diagnostics off");
 
+// Host-only instrumentation; absent from firmware and its public header.
+BuddyMood getTestAutonomousSelectionMood();
+
 namespace {
 FaceExpression requestedExpression = FaceExpression::Normal;
 ReactionSound requestedSound = ReactionSound::None;
@@ -296,6 +299,30 @@ void testScheduledAutonomyDoesNotPreventSleepy() {
   assert(getBuddyMood() == BuddyMood::Calm);
 }
 
+void testAutonomousSelectionUsesCurrentMood() {
+  // The initial deadline is overdue at the same update inactivity reaches 90s.
+  beginAt(0);
+  updateBehaviorEngine(90000);
+  assert(getBuddyReaction() == BuddyReaction::Generic);
+  assert(getTestAutonomousSelectionMood() == BuddyMood::Sleepy);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+  assert(requestedSound == ReactionSound::None);
+
+  constexpr uint32_t anchor = std::numeric_limits<uint32_t>::max() - 5000;
+  beginAt(anchor);
+  updateBehaviorEngine(anchor + uint32_t{90000});
+  assert(getTestAutonomousSelectionMood() == BuddyMood::Sleepy);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+
+  beginAt(0);
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
+  processBuddyEvent(BuddyEvent::TouchTap, 101);  // Engaged at 45.
+  finishReactionAt(102);
+  updateBehaviorEngine(20101);  // Two decay ticks before selection: Calm at 35.
+  assert(getTestAutonomousSelectionMood() == BuddyMood::Calm);
+  assert(getBuddyMood() == BuddyMood::Calm);
+}
+
 void testSleepSuppressesAutonomy() {
   beginAt(0);
   processBuddyEvent(BuddyEvent::ButtonPressed, 100);
@@ -388,6 +415,7 @@ int main() {
   testInteractionPostponesAutonomy();
   testAutonomyDoesNotChangeDecayPolicy();
   testScheduledAutonomyDoesNotPreventSleepy();
+  testAutonomousSelectionUsesCurrentMood();
   testSleepSuppressesAutonomy();
   testRolloverSafeTiming();
   return 0;
