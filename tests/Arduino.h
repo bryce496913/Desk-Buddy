@@ -9,9 +9,11 @@ constexpr uint8_t LOW = 0;
 constexpr uint8_t HIGH = 1;
 constexpr uint8_t OUTPUT = 1;
 constexpr uint8_t INPUT = 0;
+constexpr uint8_t INPUT_PULLUP = 2;
 constexpr int FALLING = 2;
 
 void pinMode(uint8_t pin, uint8_t mode);
+int digitalRead(uint8_t pin);
 int digitalPinToInterrupt(uint8_t pin);
 void attachInterrupt(int interrupt, void (*callback)(), int mode);
 void noInterrupts();

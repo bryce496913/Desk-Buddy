@@ -31,6 +31,10 @@ run_test "production behavior" production_behavior \
   "${REPO_ROOT}/tests/production_behavior_test.cpp" \
   "${REPO_ROOT}/BehaviorEngine.cpp"
 
+run_test "inputs touch gestures" inputs_touch_gestures \
+  "${REPO_ROOT}/tests/inputs_touch_gesture_test.cpp" \
+  "${REPO_ROOT}/Inputs.cpp"
+
 run_test "SoundSensor" sound_sensor \
   "${REPO_ROOT}/tests/sound_sensor_test.cpp"
 
