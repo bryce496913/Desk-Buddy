@@ -217,6 +217,29 @@ void testGrumpyReactionContext() {
   expectMood(6105, BuddyMood::Grumpy, 80, 75, 0);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
 }
+
+void testAutomaticMoodContextForIdenticalFirstSounds() {
+  beginAt();
+  processBuddyEvent(BuddyEvent::Touch, 100);
+  processBuddyEvent(BuddyEvent::Touch, 101);
+  finishAt(102);
+  updateBehaviorEngine(6102);  // Touch streak expired, engagement retained.
+  expectMood(6102, BuddyMood::Engaged, 45, 0, 6001);
+  processBuddyEvent(BuddyEvent::SoundDetected, 6103);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
+  expectMood(6103, BuddyMood::Engaged, 50, 0, 0);
+
+  for (uint32_t now = 6104; now <= 6108; ++now) {
+    processBuddyEvent(BuddyEvent::Touch, now);
+  }
+  expectMood(6108, BuddyMood::Grumpy, 100, 75, 0);
+  finishAt(6109);
+  updateBehaviorEngine(16104);  // One decay tick; sound window expired.
+  expectMood(16104, BuddyMood::Grumpy, 95, 65, 9996);
+  processBuddyEvent(BuddyEvent::SoundDetected, 16104);
+  expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious);
+  expectMood(16104, BuddyMood::Grumpy, 100, 65, 0);
+}
 }  // namespace
 
 long random(long) { return 0; }
@@ -264,5 +287,6 @@ int main() {
   testRolloverForDecayAndInactivity();
   testScoreBoundsAndReadOnlyTelemetry();
   testGrumpyReactionContext();
+  testAutomaticMoodContextForIdenticalFirstSounds();
   return 0;
 }
