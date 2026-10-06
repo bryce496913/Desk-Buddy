@@ -56,6 +56,9 @@ uint32_t nextLookAt = 0;
 uint32_t drowsyUntil = 0;
 uint32_t nextDrowsyAt = 0;
 uint32_t reactUntil = 0;
+uint32_t reactionStartedAt = 0;
+constexpr uint32_t REACTION_DURATION_MS = 1800;
+bool sideGlanceRight = false;
 FaceExpression activeExpression = FaceExpression::Normal;
 uint32_t lastFrameAt = 0;
 int backlightCurrent = 255;
@@ -103,7 +106,8 @@ struct EyeExpressionParams {
   bool showSpark;
 };
 
-EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye) {
+EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye,
+                                    uint32_t now) {
   switch (expression) {
     case FaceExpression::Happy:
       return {0.10f, 0.34f, 18, 8, isLeftEye ? 3 : -3, -6, false, false};
@@ -129,6 +133,30 @@ EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye) 
       return isLeftEye
           ? EyeExpressionParams{0.12f, 0.04f, 19, 9, -7, -9, false, false}
           : EyeExpressionParams{0.52f, 0.10f, 19, 9, 8, 5, false, false};
+    case FaceExpression::SideGlance:
+      return {0.08f, 0.06f, 18, 8, sideGlanceRight ? 16 : -16, 0, false, false};
+    case FaceExpression::Bored:
+      return {isLeftEye ? 0.66f : 0.70f, 0.12f, 17, 8, -3, 9, false, false};
+    case FaceExpression::SuspiciousGlance:
+      return {isLeftEye ? 0.50f : 0.56f, 0.18f, 17, 6, -16, 0, false, false};
+    case FaceExpression::AnnoyedSquint:
+      return {isLeftEye ? 0.38f : 0.44f, 0.26f, 18, 7, -2, 2, false, false};
+    case FaceExpression::SleepyDrift: {
+      const float progress = clampf(float(static_cast<uint32_t>(now - reactionStartedAt)) /
+                                    REACTION_DURATION_MS, 0.0f, 1.0f);
+      const float drift = progress < 0.65f ? progress / 0.65f
+          : 1.0f - 0.65f * ((progress - 0.65f) / 0.35f);
+      return {0.48f + drift * 0.22f, 0.12f, 17, 8,
+              int(drift * 5), int(drift * 13), false, false};
+    }
+    case FaceExpression::ExcitedScanning: {
+      const float progress = clampf(float(static_cast<uint32_t>(now - reactionStartedAt)) /
+                                    REACTION_DURATION_MS, 0.0f, 1.0f);
+      // Smooth left -> center -> right -> center over the existing duration.
+      const float scan = progress < 0.66f ? lerpf(-15.0f, 15.0f, progress / 0.66f)
+          : lerpf(15.0f, 0.0f, (progress - 0.66f) / 0.34f);
+      return {0.02f, 0.02f, 19, 8, int(scan), -3, false, false};
+    }
     case FaceExpression::Normal:
     default:
       return {lidAmount, lidAmount, 18, 8, 0, 0, false, false};
@@ -169,9 +197,9 @@ void drawEye(GFXcanvas16 &target, int cx, int cy, int w, int h,
   }
 }
 void renderEyeRegion(int screenCenterX, int screenCenterY, int sparkCenterX,
-                     FaceExpression expression, bool isLeftEye) {
+                     FaceExpression expression, bool isLeftEye, uint32_t now) {
   int screenX = screenCenterX - (EYE_REGION_W / 2);
-  EyeExpressionParams params = expressionParams(expression, isLeftEye);
+  EyeExpressionParams params = expressionParams(expression, isLeftEye, now);
   fillBackgroundRegion(eyeCanvas, EYE_REGION_Y, EYE_REGION_W, EYE_REGION_H);
   drawEye(eyeCanvas, EYE_REGION_W / 2, screenCenterY - EYE_REGION_Y,
           eyeW, eyeH, params);
@@ -198,8 +226,8 @@ void renderFrame(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction)
   int y = eyeY + bobY;
   FaceExpression expression = reaction == BuddyReaction::Generic
       ? activeExpression : FaceExpression::Normal;
-  renderEyeRegion(leftEyeX, y, leftEyeX - 34, expression, true);
-  renderEyeRegion(rightEyeX, y, rightEyeX + 34, expression, false);
+  renderEyeRegion(leftEyeX, y, leftEyeX - 34, expression, true, now);
+  renderEyeRegion(rightEyeX, y, rightEyeX + 34, expression, false, now);
   renderSleepZ(now, coreState);
 }
 void updateBacklight() {
@@ -228,7 +256,9 @@ void scheduleFaceBehavior(uint32_t now) {
   scheduleNextBlink(now); scheduleNextLook(now); scheduleNextDrowsy(now);
 }
 void startFaceReaction(uint32_t now, FaceExpression expression) {
-  reactUntil = now + 1800;
+  reactionStartedAt = now;
+  reactUntil = now + REACTION_DURATION_MS;
+  if (expression == FaceExpression::SideGlance) sideGlanceRight = !sideGlanceRight;
   activeExpression = expression;
   pupilTargetX = 0;
   pupilTargetY = 0;

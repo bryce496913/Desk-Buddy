@@ -11,7 +11,13 @@ enum class FaceExpression : uint8_t {
   Annoyed,
   Startled,
   Suspicious,
-  Confused
+  Confused,
+  SideGlance,
+  Bored,
+  SleepyDrift,
+  SuspiciousGlance,
+  ExcitedScanning,
+  AnnoyedSquint
 };
 
 void beginFaceRenderer();
