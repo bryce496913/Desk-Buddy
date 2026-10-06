@@ -42,6 +42,10 @@ run_test "SoundSensor" sound_sensor \
 run_test "FaceRenderer rollover timing" face_renderer_timing \
   "${REPO_ROOT}/tests/face_renderer_timing_test.cpp"
 
+run_test "FaceRenderer autonomous expressions" face_renderer_expressions \
+  -I"${REPO_ROOT}/tests/renderer_stubs" \
+  "${REPO_ROOT}/tests/face_renderer_expression_test.cpp"
+
 run_test "diagnostic BehaviorEngine" diagnostics_behavior \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
   "${REPO_ROOT}/tests/diagnostics_behavior_test.cpp" \

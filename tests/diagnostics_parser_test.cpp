@@ -22,6 +22,8 @@ DiagnosticRecentInteractionContext interaction = {
 int interactionReadCount = 0;
 uint32_t interactionReadAt = 0;
 BuddyCoreState coreState = BuddyCoreState::Awake;
+DiagnosticAutonomousBehavior lastAutonomous = DiagnosticAutonomousBehavior::Curious;
+int autonomousTriggerCount = 0;
 
 void sendCommand(const char* command) {
   for (const char* cursor = command; *cursor; ++cursor) {
@@ -32,6 +34,13 @@ void sendCommand(const char* command) {
 }
 
 BuddyCoreState getBuddyCoreState() { return coreState; }
+bool triggerDiagnosticAutonomousBehavior(DiagnosticAutonomousBehavior behavior,
+                                         uint32_t) {
+  if (coreState == BuddyCoreState::Sleeping) return false;
+  lastAutonomous = behavior;
+  ++autonomousTriggerCount;
+  return true;
+}
 BuddyMood getBuddyMood() { return currentMood; }
 DiagnosticRecentInteractionContext getDiagnosticRecentInteractionContext(uint32_t now) {
   ++interactionReadCount;
@@ -184,6 +193,38 @@ int main() {
   assert(lastReaction == DiagnosticReaction::Happy);
   sendCommand("v11");
   assert(lastVariant == DiagnosticSoundVariant::Variant1);
+  coreState = BuddyCoreState::Awake;
+  const char* autonomousCommands[] = {"a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"};
+  const char* autonomousNames[] = {"Curious", "Daydreaming", "SideGlance", "Bored",
+      "SuspiciousGlance", "AnnoyedSquint", "SleepyDrift", "ExcitedScanning"};
+  for (uint8_t index = 0; index < 8; ++index) {
+    Serial.clearOutput();
+    sendCommand(autonomousCommands[index]);
+    assert(lastAutonomous == static_cast<DiagnosticAutonomousBehavior>(index));
+    assert(autonomousTriggerCount == index + 1);
+    assert(Serial.output == std::string("DIAG: ") + autonomousNames[index] + " / Silent\n");
+  }
+  Serial.clearOutput();
+  sendCommand("a?");
+  assert(Serial.output.find("a8: ExcitedScanning") != std::string::npos);
+  assert(autonomousTriggerCount == 8);
+  Serial.clearOutput();
+  Serial.push('a');
+  updateDiagnostics(300);
+  updateDiagnostics(301);
+  assert(Serial.output.empty());
+  Serial.push('x');
+  updateDiagnostics(302);
+  assert(Serial.output.find("Invalid autonomous command") != std::string::npos);
+  sendCommand("A3v14");
+  assert(autonomousTriggerCount == 9);
+  assert(lastAutonomous == DiagnosticAutonomousBehavior::SideGlance);
+  assert(lastReaction == DiagnosticReaction::Startled);
+  coreState = BuddyCoreState::Sleeping;
+  Serial.clearOutput();
+  sendCommand("a8");
+  assert(Serial.output == "DIAG: Ignored while sleeping\n");
+  assert(autonomousTriggerCount == 9);
   sendCommand("v21");
   assert(lastVariant == DiagnosticSoundVariant::Variant2);
   sendCommand("v31");

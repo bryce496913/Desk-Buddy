@@ -23,6 +23,13 @@ enum class BuddyMood : uint8_t {
 };
 
 #if DESK_BUDDY_DIAGNOSTICS
+enum class DiagnosticAutonomousBehavior : uint8_t {
+  Curious, Daydreaming, SideGlance, Bored, SuspiciousGlance,
+  AnnoyedSquint, SleepyDrift, ExcitedScanning
+};
+bool triggerDiagnosticAutonomousBehavior(DiagnosticAutonomousBehavior behavior,
+                                         uint32_t now);
+
 enum class DiagnosticReaction : uint8_t {
   Normal,
   Happy,

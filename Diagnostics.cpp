@@ -10,6 +10,21 @@ DiagnosticSoundVariant soundVariant = DiagnosticSoundVariant::Random;
 bool variantSelectorPending = false;
 bool moodSelectorPending = false;
 bool interactionSelectorPending = false;
+bool autonomousSelectorPending = false;
+const char* const autonomousNames[] = {
+    "Curious", "Daydreaming", "SideGlance", "Bored", "SuspiciousGlance",
+    "AnnoyedSquint", "SleepyDrift", "ExcitedScanning"};
+
+void printAutonomousHelp() {
+  Serial.println("Autonomous showcase (silent):");
+  for (uint8_t index = 0; index < 8; ++index) {
+    Serial.print("a");
+    Serial.print(static_cast<unsigned int>(index + 1));
+    Serial.print(": ");
+    Serial.println(autonomousNames[index]);
+  }
+  Serial.println("a?: Autonomous showcase help");
+}
 
 const char* interactionName(DiagnosticRecentInteractionType type) {
   switch (type) {
@@ -103,6 +118,8 @@ void printDiagnosticHelp() {
   Serial.println("ms: Sleepy");
   Serial.println();
   Serial.println("i?: Recent interaction type, age, and validity");
+  Serial.println();
+  printAutonomousHelp();
 }
 
 const char* reactionName(DiagnosticReaction reaction) {
@@ -127,6 +144,26 @@ void updateDiagnostics(uint32_t now) {
 
   const char command = static_cast<char>(Serial.read());
   if (command == '\r' || command == '\n' || command == ' ') return;
+
+  if (autonomousSelectorPending) {
+    autonomousSelectorPending = false;
+    if (command == '?') {
+      printAutonomousHelp();
+    } else if (command >= '1' && command <= '8') {
+      const uint8_t index = static_cast<uint8_t>(command - '1');
+      if (triggerDiagnosticAutonomousBehavior(
+              static_cast<DiagnosticAutonomousBehavior>(index), now)) {
+        Serial.print("DIAG: ");
+        Serial.print(autonomousNames[index]);
+        Serial.println(" / Silent");
+      } else {
+        Serial.println("DIAG: Ignored while sleeping");
+      }
+    } else {
+      Serial.println("DIAG: Invalid autonomous command (use a1-a8 or a?)");
+    }
+    return;
+  }
 
   if (interactionSelectorPending) {
     interactionSelectorPending = false;
@@ -180,6 +217,10 @@ void updateDiagnostics(uint32_t now) {
   }
   if (command == 'i' || command == 'I') {
     interactionSelectorPending = true;
+    return;
+  }
+  if (command == 'a' || command == 'A') {
+    autonomousSelectorPending = true;
     return;
   }
   if (command == '?') {

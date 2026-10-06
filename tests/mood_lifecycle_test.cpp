@@ -422,6 +422,56 @@ void testRecentInteractionRecordingAndWindow() {
   expectRecent(10001, Type::None, 0, false);
 }
 
+void testAutonomousShowcaseIsolation() {
+  const DiagnosticAutonomousBehavior behaviors[] = {
+      DiagnosticAutonomousBehavior::Curious, DiagnosticAutonomousBehavior::Daydreaming,
+      DiagnosticAutonomousBehavior::SideGlance, DiagnosticAutonomousBehavior::Bored,
+      DiagnosticAutonomousBehavior::SuspiciousGlance, DiagnosticAutonomousBehavior::AnnoyedSquint,
+      DiagnosticAutonomousBehavior::SleepyDrift, DiagnosticAutonomousBehavior::ExcitedScanning};
+  const FaceExpression expressions[] = {FaceExpression::Curious, FaceExpression::Daydreaming,
+      FaceExpression::SideGlance, FaceExpression::Bored, FaceExpression::SuspiciousGlance,
+      FaceExpression::AnnoyedSquint, FaceExpression::SleepyDrift, FaceExpression::ExcitedScanning};
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
+  processBuddyEvent(BuddyEvent::SoundDetected, 101);
+  for (BuddyMood mood : {BuddyMood::Calm, BuddyMood::Engaged, BuddyMood::Grumpy, BuddyMood::Sleepy}) {
+    setDiagnosticMood(mood, 102);
+    for (uint8_t index = 0; index < 8; ++index) {
+      const auto before = getDiagnosticMoodState(200);
+      const auto previous = getDiagnosticRecentInteractionContext(200);
+      assert(triggerDiagnosticAutonomousBehavior(behaviors[index], 200));
+      expectReaction(expressions[index], ReactionSound::None);
+      assert(!isSoundEngineActive());
+      const auto after = getDiagnosticMoodState(200);
+      const auto context = getDiagnosticRecentInteractionContext(200);
+      assert(before.mood == after.mood && before.engagementScore == after.engagementScore);
+      assert(before.irritationScore == after.irritationScore && before.inactivityMs == after.inactivityMs);
+      assert(previous.type == context.type && previous.ageMs == context.ageMs && previous.recent == context.recent);
+    }
+  }
+  setDiagnosticMood(BuddyMood::Calm, 201);
+  processBuddyEvent(BuddyEvent::TouchTap, 202);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
+  expectMood(202, BuddyMood::Calm, 25, 0, 0);  // Tap #2.
+  processBuddyEvent(BuddyEvent::SoundDetected, 203);
+  expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious);  // Sound #2.
+  const int facesBefore = faceStarts;
+  assert(!triggerDiagnosticAutonomousBehavior(static_cast<DiagnosticAutonomousBehavior>(255), 204));
+  assert(faceStarts == facesBefore);
+  processBuddyEvent(BuddyEvent::ButtonPressed, 205);
+  for (auto behavior : behaviors) assert(!triggerDiagnosticAutonomousBehavior(behavior, 206));
+  assert(faceStarts == facesBefore);
+
+  beginAt();
+  processBuddyEvent(BuddyEvent::IdleTimeout, 100);
+  const FaceExpression first = expression;
+  assert(triggerDiagnosticAutonomousBehavior(DiagnosticAutonomousBehavior::Bored, 101));
+  finishAt(102);
+  processBuddyEvent(BuddyEvent::IdleTimeout, 103);
+  assert(expression != first);  // Showcase never changes selection history.
+  assert(expression == FaceExpression::Curious || expression == FaceExpression::Daydreaming);
+}
+
 void testAutonomousSelectionIsolation() {
   for (BuddyMood mood : {BuddyMood::Calm, BuddyMood::Engaged, BuddyMood::Grumpy}) {
     beginAt();
@@ -586,6 +636,7 @@ int main() {
   testGrumpyReactionContext();
   testAutomaticMoodContextForIdenticalFirstSounds();
   testRecentInteractionRecordingAndWindow();
+  testAutonomousShowcaseIsolation();
   testAutonomousSelectionIsolation();
   testRecentInteractionExclusionsAndSleep();
   testRecentInteractionRolloverAndHistoryIndependence();

@@ -18,7 +18,13 @@ constexpr uint32_t SLEEPY_AFTER_INACTIVITY_MS = 90000;
 
 enum class AutonomousBehavior : uint8_t {
   Curious,
-  Daydreaming
+  Daydreaming,
+  SideGlance,
+  Bored,
+  SleepyDrift,
+  SuspiciousGlance,
+  ExcitedScanning,
+  AnnoyedSquint
 };
 
 struct ReactionPlan {
@@ -281,8 +287,17 @@ AutonomousBehavior selectAutonomousBehavior(BuddyMood mood) {
 }
 
 AutonomousBehaviorPlan planForAutonomousBehavior(AutonomousBehavior behavior) {
-  return {behavior == AutonomousBehavior::Curious
-      ? FaceExpression::Curious : FaceExpression::Daydreaming, ReactionSound::None};
+  switch (behavior) {
+    case AutonomousBehavior::Curious: return {FaceExpression::Curious, ReactionSound::None};
+    case AutonomousBehavior::Daydreaming: return {FaceExpression::Daydreaming, ReactionSound::None};
+    case AutonomousBehavior::SideGlance: return {FaceExpression::SideGlance, ReactionSound::None};
+    case AutonomousBehavior::Bored: return {FaceExpression::Bored, ReactionSound::None};
+    case AutonomousBehavior::SleepyDrift: return {FaceExpression::SleepyDrift, ReactionSound::None};
+    case AutonomousBehavior::SuspiciousGlance: return {FaceExpression::SuspiciousGlance, ReactionSound::None};
+    case AutonomousBehavior::ExcitedScanning: return {FaceExpression::ExcitedScanning, ReactionSound::None};
+    case AutonomousBehavior::AnnoyedSquint: return {FaceExpression::AnnoyedSquint, ReactionSound::None};
+  }
+  return {FaceExpression::Normal, ReactionSound::None};
 }
 
 void resetTouchHistory() {
@@ -496,6 +511,29 @@ BuddyReaction getBuddyReaction() { return activeReaction; }
 BuddyMood getBuddyMood() { return currentMood; }
 
 #if DESK_BUDDY_DIAGNOSTICS
+bool triggerDiagnosticAutonomousBehavior(DiagnosticAutonomousBehavior requested,
+                                         uint32_t now) {
+  if (coreState != BuddyCoreState::Awake) return false;
+  AutonomousBehavior behavior;
+  switch (requested) {
+    case DiagnosticAutonomousBehavior::Curious: behavior = AutonomousBehavior::Curious; break;
+    case DiagnosticAutonomousBehavior::Daydreaming: behavior = AutonomousBehavior::Daydreaming; break;
+    case DiagnosticAutonomousBehavior::SideGlance: behavior = AutonomousBehavior::SideGlance; break;
+    case DiagnosticAutonomousBehavior::Bored: behavior = AutonomousBehavior::Bored; break;
+    case DiagnosticAutonomousBehavior::SuspiciousGlance: behavior = AutonomousBehavior::SuspiciousGlance; break;
+    case DiagnosticAutonomousBehavior::AnnoyedSquint: behavior = AutonomousBehavior::AnnoyedSquint; break;
+    case DiagnosticAutonomousBehavior::SleepyDrift: behavior = AutonomousBehavior::SleepyDrift; break;
+    case DiagnosticAutonomousBehavior::ExcitedScanning: behavior = AutonomousBehavior::ExcitedScanning; break;
+    default: return false;
+  }
+  // Showcase does not update selection history or meaningful interaction state.
+  autonomousReactionActive = false;
+  disableAutonomousBehavior();
+  const AutonomousBehaviorPlan plan = planForAutonomousBehavior(behavior);
+  startGenericReaction(now, plan.expression, plan.sound);
+  return true;
+}
+
 DiagnosticRecentInteractionContext getDiagnosticRecentInteractionContext(uint32_t now) {
   const RecentInteractionContext context = getRecentInteractionContext(now);
   DiagnosticRecentInteractionType type = DiagnosticRecentInteractionType::None;
