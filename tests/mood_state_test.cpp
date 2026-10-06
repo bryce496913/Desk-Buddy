@@ -1,3 +1,4 @@
+#include "autonomous_test_helpers.h"
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -257,8 +258,7 @@ void testSoundAndIdleEventsPreserveAccumulatedMood() {
     // exercises the actual autonomous path without changing that suppression.
     processBuddyEvent(BuddyEvent::IdleTimeout, 140);
     expectState(BuddyCoreState::Awake, BuddyReaction::Generic, mood);
-    assert(expression == FaceExpression::Curious ||
-           expression == FaceExpression::Daydreaming);
+    assert(isAutonomousExpressionForMood(expression, getBuddyMood()));
     assert(sound == ReactionSound::None);
     faceFinished = true;
     updateBehaviorEngine(150);
