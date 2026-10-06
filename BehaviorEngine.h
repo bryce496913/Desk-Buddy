@@ -49,6 +49,16 @@ BuddyReaction getBuddyReaction();
 BuddyMood getBuddyMood();
 
 #if DESK_BUDDY_DIAGNOSTICS
+enum class DiagnosticRecentInteractionType : uint8_t {
+  None, TouchTap, TouchHold, Sound
+};
+struct DiagnosticRecentInteractionContext {
+  DiagnosticRecentInteractionType type;
+  uint32_t ageMs;
+  bool recent;
+};
+DiagnosticRecentInteractionContext getDiagnosticRecentInteractionContext(uint32_t now);
+
 struct DiagnosticMoodState {
   BuddyMood mood;
   uint8_t engagementScore;
