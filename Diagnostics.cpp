@@ -8,6 +8,22 @@
 namespace {
 DiagnosticSoundVariant soundVariant = DiagnosticSoundVariant::Random;
 bool variantSelectorPending = false;
+bool moodSelectorPending = false;
+
+const char* moodName(BuddyMood mood) {
+  switch (mood) {
+    case BuddyMood::Calm: return "Calm";
+    case BuddyMood::Engaged: return "Engaged";
+    case BuddyMood::Grumpy: return "Grumpy";
+    case BuddyMood::Sleepy: return "Sleepy";
+  }
+  return "Unknown";
+}
+
+void printCurrentMood() {
+  Serial.print("DIAG: Mood = ");
+  Serial.println(moodName(getBuddyMood()));
+}
 
 const char* variantName(DiagnosticSoundVariant variant) {
   switch (variant) {
@@ -41,6 +57,13 @@ void printDiagnosticHelp() {
   Serial.println(variantName(soundVariant));
   Serial.println();
   Serial.println("?: Help");
+  Serial.println();
+  Serial.println("Mood:");
+  Serial.println("m?: Current mood");
+  Serial.println("mc: Calm");
+  Serial.println("me: Engaged");
+  Serial.println("mg: Grumpy");
+  Serial.println("ms: Sleepy");
 }
 
 const char* reactionName(DiagnosticReaction reaction) {
@@ -66,6 +89,22 @@ void updateDiagnostics(uint32_t now) {
   const char command = static_cast<char>(Serial.read());
   if (command == '\r' || command == '\n' || command == ' ') return;
 
+  if (moodSelectorPending) {
+    moodSelectorPending = false;
+    switch (command) {
+      case '?': printCurrentMood(); return;
+      case 'c': setDiagnosticMood(BuddyMood::Calm); break;
+      case 'e': setDiagnosticMood(BuddyMood::Engaged); break;
+      case 'g': setDiagnosticMood(BuddyMood::Grumpy); break;
+      case 's': setDiagnosticMood(BuddyMood::Sleepy); break;
+      default:
+        Serial.println("DIAG: Invalid mood command (use m?, mc, me, mg, or ms)");
+        return;
+    }
+    printCurrentMood();
+    return;
+  }
+
   if (variantSelectorPending) {
     variantSelectorPending = false;
     switch (command) {
@@ -84,6 +123,10 @@ void updateDiagnostics(uint32_t now) {
 
   if (command == 'v' || command == 'V') {
     variantSelectorPending = true;
+    return;
+  }
+  if (command == 'm' || command == 'M') {
+    moodSelectorPending = true;
     return;
   }
   if (command == '?') {

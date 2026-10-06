@@ -219,6 +219,8 @@ BuddyReaction getBuddyReaction() { return activeReaction; }
 BuddyMood getBuddyMood() { return currentMood; }
 
 #if DESK_BUDDY_DIAGNOSTICS
+void setDiagnosticMood(BuddyMood mood) { currentMood = mood; }
+
 bool triggerDiagnosticReaction(DiagnosticReaction reaction,
                                DiagnosticSoundVariant variant, uint32_t now,
                                uint8_t &selectedVariantIndex) {

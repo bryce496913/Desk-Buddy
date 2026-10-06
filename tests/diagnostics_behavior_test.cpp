@@ -10,6 +10,11 @@ FaceExpression lastExpression = FaceExpression::Normal;
 ReactionSound lastSound = ReactionSound::None;
 int faceReactionStarts = 0;
 int soundReactionStarts = 0;
+int soundReactionStops = 0;
+int sleepFaceEntries = 0;
+int wakeFaceRequests = 0;
+int sleepSoundRequests = 0;
+int wakeSoundRequests = 0;
 bool faceFinished = false;
 bool soundActive = false;
 uint8_t lastRequestedVariant = DIAGNOSTIC_RANDOM_VARIANT;
@@ -32,8 +37,8 @@ void startFaceReaction(uint32_t, FaceExpression expression) {
 }
 bool isFaceReactionFinished(uint32_t) { return faceFinished; }
 void finishFaceReaction(uint32_t) { lastExpression = FaceExpression::Normal; }
-void enterSleepFace(uint32_t) {}
-void wakeFace(uint32_t) {}
+void enterSleepFace(uint32_t) { sleepFaceEntries++; }
+void wakeFace(uint32_t) { wakeFaceRequests++; }
 
 void startReactionSound(uint32_t, ReactionSound sound) {
   lastSound = sound;
@@ -56,16 +61,31 @@ bool startDiagnosticReactionSound(uint32_t, ReactionSound sound,
   return selectedVariantIndex < 3;
 }
 void stopReactionSound() {
+  soundReactionStops++;
   lastSound = ReactionSound::None;
   soundActive = false;
 }
 bool isSoundEngineActive() { return soundActive; }
-void playSleepSound() {}
-void playWakeSound() {}
+void playSleepSound() { sleepSoundRequests++; }
+void playWakeSound() { wakeSoundRequests++; }
 void ignoreSoundSensorAfterWake() {}
 
 int main() {
   beginBehaviorEngine(100);
+  assert(getBuddyMood() == BuddyMood::Calm);
+  const BuddyMood moods[] = {BuddyMood::Engaged, BuddyMood::Grumpy,
+                            BuddyMood::Sleepy, BuddyMood::Calm};
+  for (BuddyMood mood : moods) {
+    setDiagnosticMood(mood);
+    assert(getBuddyMood() == mood);
+    assert(getBuddyCoreState() == BuddyCoreState::Awake);
+    assert(getBuddyReaction() == BuddyReaction::Idle);
+    assert(faceReactionStarts == 0);
+    assert(soundReactionStarts == 0);
+    assert(soundReactionStops == 0);
+    assert(sleepFaceEntries == 0 && wakeFaceRequests == 0);
+    assert(sleepSoundRequests == 0 && wakeSoundRequests == 0);
+  }
   uint8_t selectedVariant = DIAGNOSTIC_RANDOM_VARIANT;
 
   const DiagnosticReaction reactions[] = {
@@ -111,10 +131,27 @@ int main() {
                                    selectedVariant));
   assert(lastRequestedVariant == 1);
   assert(selectedVariant == 1);
+  setDiagnosticMood(BuddyMood::Engaged);
+  const int faceStartsBeforeMood = faceReactionStarts;
+  const int soundStartsBeforeMood = soundReactionStarts;
+  const int soundStopsBeforeMood = soundReactionStops;
+  setDiagnosticMood(BuddyMood::Grumpy);
+  assert(getBuddyReaction() == BuddyReaction::Generic);
+  assert(lastExpression == FaceExpression::Annoyed);
+  assert(lastSound == ReactionSound::Annoyed);
+  assert(soundActive);
+  assert(faceReactionStarts == faceStartsBeforeMood);
+  assert(soundReactionStarts == soundStartsBeforeMood);
+  assert(soundReactionStops == soundStopsBeforeMood);
+  setDiagnosticMood(BuddyMood::Engaged);
   processBuddyEvent(BuddyEvent::Touch, 401);
   assert(lastExpression == FaceExpression::Happy);
+  setDiagnosticMood(BuddyMood::Sleepy);
   processBuddyEvent(BuddyEvent::Touch, 402);
   assert(lastExpression == FaceExpression::Curious);
+  setDiagnosticMood(BuddyMood::Calm);
+  processBuddyEvent(BuddyEvent::Touch, 403);
+  assert(lastExpression == FaceExpression::Annoyed);
 
   // Nor does it alter the independent real sound streak.
   assert(triggerDiagnosticReaction(DiagnosticReaction::Confused,
@@ -124,23 +161,48 @@ int main() {
   assert(selectedVariant == 2);
   processBuddyEvent(BuddyEvent::SoundDetected, 501);
   assert(lastExpression == FaceExpression::Startled);
+  setDiagnosticMood(BuddyMood::Grumpy);
   processBuddyEvent(BuddyEvent::SoundDetected, 502);
   assert(lastExpression == FaceExpression::Suspicious);
+  setDiagnosticMood(BuddyMood::Engaged);
+  processBuddyEvent(BuddyEvent::SoundDetected, 503);
+  assert(lastExpression == FaceExpression::Confused);
 
   // Autonomous personalities never start in a diagnostic build.
   const int startsBeforeIdleUpdate = faceReactionStarts;
   assert(triggerDiagnosticReaction(DiagnosticReaction::Normal,
                                    DiagnosticSoundVariant::Variant1, 600,
                                    selectedVariant));
+  setDiagnosticMood(BuddyMood::Grumpy);
   updateBehaviorEngine(1000000);
   assert(faceReactionStarts == startsBeforeIdleUpdate);
 
   processBuddyEvent(BuddyEvent::ButtonPressed, 700);
   assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
+  assert(getBuddyMood() == BuddyMood::Grumpy);
   assert(!triggerDiagnosticReaction(DiagnosticReaction::Happy,
                                     DiagnosticSoundVariant::Variant1, 701,
                                     selectedVariant));
   assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
+
+  const int facesBeforeSleepingMood = faceReactionStarts;
+  const int soundsBeforeSleepingMood = soundReactionStarts;
+  const int stopsBeforeSleepingMood = soundReactionStops;
+  setDiagnosticMood(BuddyMood::Sleepy);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+  assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
+  assert(getBuddyReaction() == BuddyReaction::Idle);
+  setDiagnosticMood(BuddyMood::Grumpy);
+  assert(faceReactionStarts == facesBeforeSleepingMood);
+  assert(soundReactionStarts == soundsBeforeSleepingMood);
+  assert(soundReactionStops == stopsBeforeSleepingMood);
+  assert(sleepFaceEntries == 1 && wakeFaceRequests == 0);
+  assert(sleepSoundRequests == 1 && wakeSoundRequests == 0);
+  processBuddyEvent(BuddyEvent::ButtonPressed, 702);
+  assert(getBuddyCoreState() == BuddyCoreState::Awake);
+  assert(getBuddyMood() == BuddyMood::Grumpy);
+  beginBehaviorEngine(800);
+  assert(getBuddyMood() == BuddyMood::Calm);
 
   assert(soundReactionStarts >= 1);
   return 0;
