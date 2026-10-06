@@ -17,6 +17,7 @@ enum class IdlePersonality : uint8_t {
 
 BuddyCoreState coreState = BuddyCoreState::Awake;
 BuddyReaction activeReaction = BuddyReaction::Idle;
+BuddyMood currentMood = BuddyMood::Calm;
 uint32_t lastTouchAt = 0;
 uint8_t touchStreak = 0;
 uint32_t lastSoundAt = 0;
@@ -112,6 +113,7 @@ void wakeBuddy(uint32_t now) {
 void beginBehaviorEngine(uint32_t now) {
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
+  currentMood = BuddyMood::Calm;
   resetTouchHistory();
   resetSoundHistory();
   scheduleFaceBehavior(now);
@@ -214,6 +216,7 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
 
 BuddyCoreState getBuddyCoreState() { return coreState; }
 BuddyReaction getBuddyReaction() { return activeReaction; }
+BuddyMood getBuddyMood() { return currentMood; }
 
 #if DESK_BUDDY_DIAGNOSTICS
 bool triggerDiagnosticReaction(DiagnosticReaction reaction,
