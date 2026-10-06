@@ -20,6 +20,33 @@ enum class IdlePersonality : uint8_t {
   Daydreaming
 };
 
+struct ReactionPlan {
+  FaceExpression expression;
+  ReactionSound sound;
+};
+
+ReactionPlan selectTouchReaction(BuddyMood mood, uint8_t streak) {
+  (void)mood;  // Pass 3A keeps the V1 mapping for every mood.
+  if (streak == 1) {
+    return {FaceExpression::Happy, ReactionSound::Happy};
+  }
+  if (streak == 2) {
+    return {FaceExpression::Curious, ReactionSound::Curious};
+  }
+  return {FaceExpression::Annoyed, ReactionSound::Annoyed};
+}
+
+ReactionPlan selectSoundReaction(BuddyMood mood, uint8_t streak) {
+  (void)mood;  // Pass 3A keeps the V1 mapping for every mood.
+  if (streak == 1) {
+    return {FaceExpression::Startled, ReactionSound::Startled};
+  }
+  if (streak == 2) {
+    return {FaceExpression::Suspicious, ReactionSound::Suspicious};
+  }
+  return {FaceExpression::Confused, ReactionSound::Confused};
+}
+
 BuddyCoreState coreState = BuddyCoreState::Awake;
 BuddyReaction activeReaction = BuddyReaction::Idle;
 BuddyMood currentMood = BuddyMood::Calm;
@@ -221,6 +248,8 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       break;
     case BuddyEvent::Touch:
       if (coreState == BuddyCoreState::Awake) {
+        // Selection uses arrival context, before this touch changes mood.
+        const BuddyMood reactionMood = currentMood;
         lastMeaningfulActivityAt = now;
         autonomousReactionActive = false;
         scheduleNextIdlePersonality(now);
@@ -243,20 +272,14 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
         }
         updateMoodState(now);
 
-        if (touchStreak == 1) {
-          startGenericReaction(now, FaceExpression::Happy,
-                               ReactionSound::Happy);
-        } else if (touchStreak == 2) {
-          startGenericReaction(now, FaceExpression::Curious,
-                               ReactionSound::Curious);
-        } else {
-          startGenericReaction(now, FaceExpression::Annoyed,
-                               ReactionSound::Annoyed);
-        }
+        const ReactionPlan plan = selectTouchReaction(reactionMood, touchStreak);
+        startGenericReaction(now, plan.expression, plan.sound);
       }
       break;
     case BuddyEvent::SoundDetected:
       if (coreState == BuddyCoreState::Awake) {
+        // Sleepy may become Calm below; retain Sleepy as reaction context.
+        const BuddyMood reactionMood = currentMood;
         lastMeaningfulActivityAt = now;
         increaseScore(engagementScore, 5);
         updateMoodState(now);
@@ -271,16 +294,8 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
         }
         lastSoundAt = now;
 
-        if (soundStreak == 1) {
-          startGenericReaction(now, FaceExpression::Startled,
-                               ReactionSound::Startled);
-        } else if (soundStreak == 2) {
-          startGenericReaction(now, FaceExpression::Suspicious,
-                               ReactionSound::Suspicious);
-        } else {
-          startGenericReaction(now, FaceExpression::Confused,
-                               ReactionSound::Confused);
-        }
+        const ReactionPlan plan = selectSoundReaction(reactionMood, soundStreak);
+        startGenericReaction(now, plan.expression, plan.sound);
       }
       break;
     case BuddyEvent::IdleTimeout:
