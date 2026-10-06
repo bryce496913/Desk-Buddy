@@ -12,9 +12,24 @@ namespace {
 DiagnosticReaction lastReaction = DiagnosticReaction::Normal;
 DiagnosticSoundVariant lastVariant = DiagnosticSoundVariant::Random;
 int triggerCount = 0;
+BuddyMood currentMood = BuddyMood::Calm;
+int moodSetCount = 0;
+BuddyCoreState coreState = BuddyCoreState::Awake;
+
+void sendCommand(const char* command) {
+  for (const char* cursor = command; *cursor; ++cursor) {
+    Serial.push(*cursor);
+    updateDiagnostics(200);
+  }
+}
 }
 
-BuddyCoreState getBuddyCoreState() { return BuddyCoreState::Awake; }
+BuddyCoreState getBuddyCoreState() { return coreState; }
+BuddyMood getBuddyMood() { return currentMood; }
+void setDiagnosticMood(BuddyMood mood) {
+  currentMood = mood;
+  moodSetCount++;
+}
 
 bool triggerDiagnosticReaction(DiagnosticReaction reaction,
                                DiagnosticSoundVariant variant, uint32_t,
@@ -36,6 +51,11 @@ int main() {
   assert(Serial.output.find("v1: Variant 1") != std::string::npos);
   assert(Serial.output.find("Sound variant mode: Random") !=
          std::string::npos);
+  assert(Serial.output.find("m?: Current mood") != std::string::npos);
+  assert(Serial.output.find("mc: Calm") != std::string::npos);
+  assert(Serial.output.find("me: Engaged") != std::string::npos);
+  assert(Serial.output.find("mg: Grumpy") != std::string::npos);
+  assert(Serial.output.find("ms: Sleepy") != std::string::npos);
   Serial.clearOutput();
 
   // The first character only changes parser state; it never waits or triggers.
@@ -84,5 +104,71 @@ int main() {
   updateDiagnostics(110);
   assert(lastReaction == DiagnosticReaction::Normal);
   assert(lastVariant == DiagnosticSoundVariant::Variant3);
+
+  const int triggersBeforeMood = triggerCount;
+  Serial.clearOutput();
+  sendCommand("m?");
+  assert(Serial.output == "DIAG: Mood = Calm\n");
+  assert(moodSetCount == 0);
+
+  const BuddyMood moods[] = {BuddyMood::Calm, BuddyMood::Engaged,
+                            BuddyMood::Grumpy, BuddyMood::Sleepy};
+  const char* commands[] = {"mc", "me", "mg", "ms"};
+  const char* names[] = {"Calm", "Engaged", "Grumpy", "Sleepy"};
+  for (int index = 0; index < 4; ++index) {
+    Serial.clearOutput();
+    sendCommand(commands[index]);
+    assert(currentMood == moods[index]);
+    assert(moodSetCount == index + 1);
+    const std::string expected = std::string("DIAG: Mood = ") + names[index] + "\n";
+    assert(Serial.output == expected);
+    Serial.clearOutput();
+    sendCommand("m?");
+    assert(Serial.output == expected);
+    assert(moodSetCount == index + 1);
+  }
+  assert(triggerCount == triggersBeforeMood);
+
+  // A selector can arrive in a later loop, with no mutation while pending.
+  Serial.clearOutput();
+  Serial.push('m');
+  updateDiagnostics(300);
+  updateDiagnostics(301);  // No serial input; return immediately.
+  assert(currentMood == BuddyMood::Sleepy);
+  assert(moodSetCount == 4);
+  assert(Serial.output.empty());
+  Serial.push('g');
+  updateDiagnostics(302);
+  assert(currentMood == BuddyMood::Grumpy);
+  assert(moodSetCount == 5);
+  assert(Serial.output == "DIAG: Mood = Grumpy\n");
+
+  // Invalid selectors are consumed and normal reaction/variant parsing resumes.
+  Serial.clearOutput();
+  sendCommand("mx1");
+  assert(Serial.output.find("DIAG: Invalid mood command") != std::string::npos);
+  assert(currentMood == BuddyMood::Grumpy);
+  assert(moodSetCount == 5);
+  assert(triggerCount == triggersBeforeMood + 1);
+  assert(lastReaction == DiagnosticReaction::Happy);
+  sendCommand("v11");
+  assert(lastVariant == DiagnosticSoundVariant::Variant1);
+  sendCommand("v21");
+  assert(lastVariant == DiagnosticSoundVariant::Variant2);
+  sendCommand("v31");
+  assert(lastVariant == DiagnosticSoundVariant::Variant3);
+  sendCommand("vr1");
+  assert(lastVariant == DiagnosticSoundVariant::Random);
+
+  // Mood reporting and selection work while sleeping without waking Buddy.
+  coreState = BuddyCoreState::Sleeping;
+  Serial.clearOutput();
+  sendCommand("m?");
+  assert(Serial.output == "DIAG: Mood = Grumpy\n");
+  assert(moodSetCount == 5);
+  sendCommand("mc");
+  sendCommand("mg");
+  assert(currentMood == BuddyMood::Grumpy);
+  assert(coreState == BuddyCoreState::Sleeping);
   return 0;
 }
