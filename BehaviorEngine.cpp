@@ -26,7 +26,17 @@ struct ReactionPlan {
 };
 
 ReactionPlan selectTouchReaction(BuddyMood mood, uint8_t streak) {
-  (void)mood;  // Pass 3A keeps the V1 mapping for every mood.
+  if (mood == BuddyMood::Engaged) {
+    return streak < 3
+        ? ReactionPlan{FaceExpression::Happy, ReactionSound::Happy}
+        : ReactionPlan{FaceExpression::Curious, ReactionSound::Curious};
+  }
+  if (mood == BuddyMood::Grumpy || mood == BuddyMood::Sleepy) {
+    return streak == 1
+        ? ReactionPlan{FaceExpression::Curious, ReactionSound::Curious}
+        : ReactionPlan{FaceExpression::Annoyed, ReactionSound::Annoyed};
+  }
+  // Calm preserves V1.
   if (streak == 1) {
     return {FaceExpression::Happy, ReactionSound::Happy};
   }

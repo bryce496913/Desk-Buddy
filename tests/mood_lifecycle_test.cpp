@@ -87,7 +87,7 @@ void testExcessiveAttentionAndRecovery() {
   expectMood(103, BuddyMood::Engaged, 55, 50, 0);
   processBuddyEvent(BuddyEvent::Touch, 104);
   expectMood(104, BuddyMood::Grumpy, 60, 75, 0);
-  expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   finishAt(105);
   updateBehaviorEngine(10000);
   expectMood(10000, BuddyMood::Grumpy, 55, 65, 9896);
@@ -122,7 +122,7 @@ void testSleepyTouchAndSoundAlertness() {
   updateBehaviorEngine(90000);
   processBuddyEvent(BuddyEvent::Touch, 90001);
   expectMood(90001, BuddyMood::Calm, 20, 0, 0);
-  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   processBuddyEvent(BuddyEvent::Touch, 90002);
   expectMood(90002, BuddyMood::Engaged, 45, 0, 0);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
@@ -209,13 +209,13 @@ void testScoreBoundsAndReadOnlyTelemetry() {
   expectMood(1000, BuddyMood::Engaged, 100, 0, 0);
 }
 
-void testV1ReactionBoundary() {
+void testGrumpyReactionContext() {
   beginAt();
   buildGrumpy();
   finishAt(105);
   processBuddyEvent(BuddyEvent::Touch, 6105);  // Streak expired, mood retained.
   expectMood(6105, BuddyMood::Grumpy, 80, 75, 0);
-  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
 }
 }  // namespace
 
@@ -263,6 +263,6 @@ int main() {
   testPhysicalSleepPausesScoresAndInactivity();
   testRolloverForDecayAndInactivity();
   testScoreBoundsAndReadOnlyTelemetry();
-  testV1ReactionBoundary();
+  testGrumpyReactionContext();
   return 0;
 }
