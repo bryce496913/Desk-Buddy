@@ -181,6 +181,38 @@ void startGenericReaction(uint32_t now, FaceExpression expression,
   startReactionSound(now, sound);
 }
 
+// Transitional policy shared by Tap and Hold until Hold gets its own meaning.
+void handleLegacyTouchInteraction(uint32_t now) {
+  if (coreState == BuddyCoreState::Awake) {
+    // Selection uses arrival context, before this touch changes mood.
+    const BuddyMood reactionMood = currentMood;
+    lastMeaningfulActivityAt = now;
+    autonomousReactionActive = false;
+    scheduleNextIdlePersonality(now);
+    if (touchStreak == 0 ||
+        static_cast<uint32_t>(now - lastTouchAt) >
+            TOUCH_REPEAT_WINDOW_MS) {
+      touchStreak = 1;
+    } else if (touchStreak < 3) {
+      touchStreak++;
+    }
+    lastTouchAt = now;
+
+    if (touchStreak == 1) {
+      increaseScore(engagementScore, 20);
+    } else if (touchStreak == 2) {
+      increaseScore(engagementScore, 25);
+    } else {
+      increaseScore(engagementScore, 5);
+      increaseScore(irritationScore, 25);
+    }
+    updateMoodState(now);
+
+    const ReactionPlan plan = selectTouchReaction(reactionMood, touchStreak);
+    startGenericReaction(now, plan.expression, plan.sound);
+  }
+}
+
 void enterSleep(uint32_t now) {
   lastMoodDecayAt = now;
   lastMeaningfulActivityAt = now;
@@ -266,35 +298,9 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
         enterSleep(now);
       }
       break;
-    case BuddyEvent::Touch:
-      if (coreState == BuddyCoreState::Awake) {
-        // Selection uses arrival context, before this touch changes mood.
-        const BuddyMood reactionMood = currentMood;
-        lastMeaningfulActivityAt = now;
-        autonomousReactionActive = false;
-        scheduleNextIdlePersonality(now);
-        if (touchStreak == 0 ||
-            static_cast<uint32_t>(now - lastTouchAt) >
-                TOUCH_REPEAT_WINDOW_MS) {
-          touchStreak = 1;
-        } else if (touchStreak < 3) {
-          touchStreak++;
-        }
-        lastTouchAt = now;
-
-        if (touchStreak == 1) {
-          increaseScore(engagementScore, 20);
-        } else if (touchStreak == 2) {
-          increaseScore(engagementScore, 25);
-        } else {
-          increaseScore(engagementScore, 5);
-          increaseScore(irritationScore, 25);
-        }
-        updateMoodState(now);
-
-        const ReactionPlan plan = selectTouchReaction(reactionMood, touchStreak);
-        startGenericReaction(now, plan.expression, plan.sound);
-      }
+    case BuddyEvent::TouchTap:
+    case BuddyEvent::TouchHold:
+      handleLegacyTouchInteraction(now);
       break;
     case BuddyEvent::SoundDetected:
       if (coreState == BuddyCoreState::Awake) {

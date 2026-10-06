@@ -67,7 +67,7 @@ void testTouchCoexistenceAndCompletion() {
   for (BuddyMood mood : moods) {
     beginAt();  // Fresh history ensures this is a first touch for every mood.
     setDiagnosticMood(mood, 100);
-    processBuddyEvent(BuddyEvent::Touch, 110);
+    processBuddyEvent(BuddyEvent::TouchTap, 110);
     const BuddyMood moodAfterTouch =
         mood == BuddyMood::Sleepy ? BuddyMood::Calm : mood;
     const bool curious = mood == BuddyMood::Grumpy || mood == BuddyMood::Sleepy;
@@ -96,7 +96,7 @@ void testTouchLadderPreservesMood() {
   const ReactionSound sounds[] = {ReactionSound::Happy, ReactionSound::Happy,
                                   ReactionSound::Curious};
   for (uint8_t index = 0; index < 3; ++index) {
-    processBuddyEvent(BuddyEvent::Touch, 110 + index);
+    processBuddyEvent(BuddyEvent::TouchTap, 110 + index);
     expectReaction(expressions[index], sounds[index], BuddyMood::Engaged);
   }
 }
@@ -135,7 +135,7 @@ void testSleepWakePreservesEveryMood() {
     setDiagnosticMood(mood, 100);
     processBuddyEvent(BuddyEvent::ButtonPressed, 110);
     expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, mood);
-    processBuddyEvent(BuddyEvent::Touch, 120);
+    processBuddyEvent(BuddyEvent::TouchTap, 120);
     processBuddyEvent(BuddyEvent::SoundDetected, 130);
     updateBehaviorEngine(140);
     expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, mood);
@@ -160,10 +160,10 @@ void testDiagnosticNormalPreservesMood() {
 
 void testMoodChangesPreserveHistories() {
   beginAt();
-  processBuddyEvent(BuddyEvent::Touch, 110);
+  processBuddyEvent(BuddyEvent::TouchTap, 110);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
   setDiagnosticMood(BuddyMood::Grumpy, 100);
-  processBuddyEvent(BuddyEvent::Touch, 6110);  // Original touch window boundary.
+  processBuddyEvent(BuddyEvent::TouchTap, 6110);  // Original touch window boundary.
   expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed,
                  BuddyMood::Grumpy);
 
@@ -183,9 +183,9 @@ void testReinitializationResetsMood() {
   expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, BuddyMood::Grumpy);
   beginBehaviorEngine(200);
   expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Calm);
-  processBuddyEvent(BuddyEvent::Touch, 210);
+  processBuddyEvent(BuddyEvent::TouchTap, 210);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
-  processBuddyEvent(BuddyEvent::Touch, 220);
+  processBuddyEvent(BuddyEvent::TouchTap, 220);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious,
                  BuddyMood::Engaged);
 }
@@ -202,13 +202,13 @@ void testFreshTouchProgressionAndSaturation() {
       ReactionSound::Happy, ReactionSound::Curious, ReactionSound::Curious,
       ReactionSound::Curious, ReactionSound::Curious};
   for (uint8_t index = 0; index < 5; ++index) {
-    processBuddyEvent(BuddyEvent::Touch, 110 + index);
+    processBuddyEvent(BuddyEvent::TouchTap, 110 + index);
     expectReaction(expressions[index], sounds[index], expectedMoods[index]);
   }
   // Many increments would wrap either uint8_t score without saturation.
   // Both scores become high; irritation must continue to take precedence.
   for (uint32_t now = 115; now < 1115; ++now) {
-    processBuddyEvent(BuddyEvent::Touch, now);
+    processBuddyEvent(BuddyEvent::TouchTap, now);
     expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed,
                    BuddyMood::Grumpy);
   }
@@ -216,19 +216,19 @@ void testFreshTouchProgressionAndSaturation() {
 
 void testExpiredTouchWindowPreservesScores() {
   beginAt();
-  processBuddyEvent(BuddyEvent::Touch, 110);
+  processBuddyEvent(BuddyEvent::TouchTap, 110);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
-  processBuddyEvent(BuddyEvent::Touch, 6111);
+  processBuddyEvent(BuddyEvent::TouchTap, 6111);
   // Two separate first touches contribute 20 + 20, reaching exactly 40.
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
-  processBuddyEvent(BuddyEvent::Touch, 12112);
+  processBuddyEvent(BuddyEvent::TouchTap, 12112);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
 
   beginAt();
   for (uint32_t now = 110; now < 115; ++now) {
-    processBuddyEvent(BuddyEvent::Touch, now);
+    processBuddyEvent(BuddyEvent::TouchTap, now);
   }
-  processBuddyEvent(BuddyEvent::Touch, 6115);
+  processBuddyEvent(BuddyEvent::TouchTap, 6115);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Grumpy);
 }
 
@@ -237,7 +237,7 @@ void testSoundAndIdleEventsPreserveAccumulatedMood() {
   for (int touchCount : touchCounts) {
     beginAt();
     for (int index = 0; index < touchCount; ++index) {
-      processBuddyEvent(BuddyEvent::Touch, 110 + index);
+      processBuddyEvent(BuddyEvent::TouchTap, 110 + index);
     }
     const BuddyMood mood = touchCount == 2 ? BuddyMood::Engaged : BuddyMood::Grumpy;
     processBuddyEvent(BuddyEvent::SoundDetected, 120);
@@ -265,7 +265,7 @@ void testSoundAndIdleEventsPreserveAccumulatedMood() {
     // Sound and autonomy do not reset the existing decay clock.
     updateBehaviorEngine(9999);
     expectState(BuddyCoreState::Awake, BuddyReaction::Idle, mood);
-    processBuddyEvent(BuddyEvent::Touch, 10000);
+    processBuddyEvent(BuddyEvent::TouchTap, 10000);
     expectReaction(mood == BuddyMood::Grumpy ? FaceExpression::Curious : FaceExpression::Happy,
                    mood == BuddyMood::Grumpy ? ReactionSound::Curious : ReactionSound::Happy, mood);
   }
@@ -275,27 +275,27 @@ void testSleepWakePreservesAccumulatedScores() {
   // A subthreshold engagement score survives sleep and combines with a new
   // first touch after wake (20 + 20), rather than starting from zero again.
   beginAt();
-  processBuddyEvent(BuddyEvent::Touch, 110);
+  processBuddyEvent(BuddyEvent::TouchTap, 110);
   processBuddyEvent(BuddyEvent::ButtonPressed, 120);
   updateBehaviorEngine(1000000);
   processBuddyEvent(BuddyEvent::ButtonPressed, 1000010);
-  processBuddyEvent(BuddyEvent::Touch, 1000020);
+  processBuddyEvent(BuddyEvent::TouchTap, 1000020);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
 
   // Four touches leave irritation at 50. Sleep resets the reaction streak,
   // but the third touch after wake must add 25 to that retained irritation.
   beginAt();
   for (uint32_t now = 110; now < 114; ++now) {
-    processBuddyEvent(BuddyEvent::Touch, now);
+    processBuddyEvent(BuddyEvent::TouchTap, now);
   }
   processBuddyEvent(BuddyEvent::ButtonPressed, 120);
   processBuddyEvent(BuddyEvent::ButtonPressed, 130);
-  processBuddyEvent(BuddyEvent::Touch, 140);
+  processBuddyEvent(BuddyEvent::TouchTap, 140);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
-  processBuddyEvent(BuddyEvent::Touch, 150);
+  processBuddyEvent(BuddyEvent::TouchTap, 150);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy,
                  BuddyMood::Engaged);
-  processBuddyEvent(BuddyEvent::Touch, 160);
+  processBuddyEvent(BuddyEvent::TouchTap, 160);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious,
                  BuddyMood::Grumpy);
   processBuddyEvent(BuddyEvent::ButtonPressed, 170);
@@ -307,20 +307,20 @@ void testSleepWakePreservesAccumulatedScores() {
 void testDiagnosticCanonicalScores() {
   beginAt();
   for (uint32_t now = 110; now < 120; ++now) {
-    processBuddyEvent(BuddyEvent::Touch, now);
+    processBuddyEvent(BuddyEvent::TouchTap, now);
   }
   setDiagnosticMood(BuddyMood::Calm, 100);
-  processBuddyEvent(BuddyEvent::Touch, 6120);  // Fresh streak, cleared scores.
+  processBuddyEvent(BuddyEvent::TouchTap, 6120);  // Fresh streak, cleared scores.
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
-  processBuddyEvent(BuddyEvent::Touch, 6121);
+  processBuddyEvent(BuddyEvent::TouchTap, 6121);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious,
                  BuddyMood::Engaged);
 
   setDiagnosticMood(BuddyMood::Engaged, 100);
-  processBuddyEvent(BuddyEvent::Touch, 12122);
+  processBuddyEvent(BuddyEvent::TouchTap, 12122);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
   setDiagnosticMood(BuddyMood::Grumpy, 100);
-  processBuddyEvent(BuddyEvent::Touch, 18123);
+  processBuddyEvent(BuddyEvent::TouchTap, 18123);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Grumpy);
 
   setDiagnosticMood(BuddyMood::Sleepy, 18123);
@@ -328,16 +328,16 @@ void testDiagnosticCanonicalScores() {
   assert(getBuddyMood() == BuddyMood::Sleepy);
   processBuddyEvent(BuddyEvent::SoundDetected, 18125);
   assert(getBuddyMood() == BuddyMood::Calm);
-  processBuddyEvent(BuddyEvent::Touch, 24124);
+  processBuddyEvent(BuddyEvent::TouchTap, 24124);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
-  processBuddyEvent(BuddyEvent::Touch, 24125);
+  processBuddyEvent(BuddyEvent::TouchTap, 24125);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious,
                  BuddyMood::Engaged);
 }
 
 void buildTouchMood(uint32_t start, int count) {
   for (int index = 0; index < count; ++index) {
-    processBuddyEvent(BuddyEvent::Touch, start + index);
+    processBuddyEvent(BuddyEvent::TouchTap, start + index);
   }
 }
 
@@ -383,7 +383,7 @@ void testGrumpyRecoveryAndMultipleTicks() {
   assert(getBuddyMood() == BuddyMood::Calm);
   // A new first touch adds 20 to the retained engagement 35, proving this
   // was score decay rather than a blanket reset to zero.
-  processBuddyEvent(BuddyEvent::Touch, 50001);
+  processBuddyEvent(BuddyEvent::TouchTap, 50001);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
 }
 
@@ -392,14 +392,14 @@ void testLongGapSaturatesAtZero() {
   beginAt(0);
   updateBehaviorEngine(max);
   assert(getBuddyMood() == BuddyMood::Sleepy);
-  processBuddyEvent(BuddyEvent::Touch, max);
+  processBuddyEvent(BuddyEvent::TouchTap, max);
   assert(getBuddyMood() == BuddyMood::Calm);  // Zero + 20, no underflow.
 
   beginAt(0);
   buildTouchMood(1, 100);  // Both scores saturate at 100.
   updateBehaviorEngine(max);
   assert(getBuddyMood() == BuddyMood::Calm);
-  processBuddyEvent(BuddyEvent::Touch, max);
+  processBuddyEvent(BuddyEvent::TouchTap, max);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
 }
 
@@ -439,8 +439,8 @@ void testRolloverDecayClock() {
 
 void testEventsDoNotRestartDecayClock() {
   beginAt(0);
-  processBuddyEvent(BuddyEvent::Touch, 1);  // engagement 20.
-  processBuddyEvent(BuddyEvent::Touch, 9000);  // New streak, engagement 40.
+  processBuddyEvent(BuddyEvent::TouchTap, 1);  // engagement 20.
+  processBuddyEvent(BuddyEvent::TouchTap, 9000);  // New streak, engagement 40.
   updateBehaviorEngine(9999);
   assert(getBuddyMood() == BuddyMood::Engaged);
   updateBehaviorEngine(10000);
@@ -514,9 +514,9 @@ void testInactivityBoundaryAndEligibility() {
 void testSleepyAlertingAndSoundDelta() {
   beginAt(0);
   updateBehaviorEngine(90000);
-  processBuddyEvent(BuddyEvent::Touch, 90001);
+  processBuddyEvent(BuddyEvent::TouchTap, 90001);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Calm);
-  processBuddyEvent(BuddyEvent::Touch, 90002);
+  processBuddyEvent(BuddyEvent::TouchTap, 90002);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious,
                  BuddyMood::Engaged);
 
@@ -550,7 +550,7 @@ void testSoundSaturationWithoutIrritation() {
 }
 
 void testRealActivityRestartsInactivity() {
-  const BuddyEvent events[] = {BuddyEvent::Touch, BuddyEvent::SoundDetected};
+  const BuddyEvent events[] = {BuddyEvent::TouchTap, BuddyEvent::SoundDetected};
   for (BuddyEvent event : events) {
     beginAt(0);
     updateBehaviorEngine(89998);
@@ -614,7 +614,7 @@ void testPhysicalSleepResetsWakingInactivity() {
   updateBehaviorEngine(wakeAt - 1);
   expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, BuddyMood::Calm);
   // Ignored sleeping input must not build scores or wake Buddy.
-  processBuddyEvent(BuddyEvent::Touch, wakeAt - 1);
+  processBuddyEvent(BuddyEvent::TouchTap, wakeAt - 1);
   processBuddyEvent(BuddyEvent::SoundDetected, wakeAt - 1);
   processBuddyEvent(BuddyEvent::ButtonPressed, wakeAt);
   updateBehaviorEngine(wakeAt);
@@ -670,16 +670,18 @@ void testContextTouchAndSoundMappings() {
       {ReactionSound::Startled, ReactionSound::Startled, ReactionSound::Confused, ReactionSound::Confused}};
 
   for (BuddyMood mood : moods) {
-    beginAt();
-    for (uint8_t index = 0; index < 4; ++index) {
-      // Force arrival mood for each event without resetting its history.
-      setDiagnosticMood(mood, 110 + index);
-      processBuddyEvent(BuddyEvent::Touch, 110 + index);
-      assert(getBuddyReaction() == BuddyReaction::Generic);
-      assert(expression == touchExpressions[static_cast<uint8_t>(mood)][index]);
-      assert(sound == touchSounds[static_cast<uint8_t>(mood)][index]);
-      if (index == 0 && mood == BuddyMood::Sleepy) {
-        assert(getBuddyMood() == BuddyMood::Calm);
+    for (BuddyEvent event : {BuddyEvent::TouchTap, BuddyEvent::TouchHold}) {
+      beginAt();
+      for (uint8_t index = 0; index < 4; ++index) {
+        // Force arrival mood for each event without resetting its history.
+        setDiagnosticMood(mood, 110 + index);
+        processBuddyEvent(event, 110 + index);
+        assert(getBuddyReaction() == BuddyReaction::Generic);
+        assert(expression == touchExpressions[static_cast<uint8_t>(mood)][index]);
+        assert(sound == touchSounds[static_cast<uint8_t>(mood)][index]);
+        if (index == 0 && mood == BuddyMood::Sleepy) {
+          assert(getBuddyMood() == BuddyMood::Calm);
+        }
       }
     }
 
@@ -765,9 +767,9 @@ void testGrumpyTouchContextAfterPhysicalWake() {
   processBuddyEvent(BuddyEvent::ButtonPressed, 120);
   processBuddyEvent(BuddyEvent::ButtonPressed, 130);
   expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Grumpy);
-  processBuddyEvent(BuddyEvent::Touch, 140);
+  processBuddyEvent(BuddyEvent::TouchTap, 140);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Grumpy);
-  processBuddyEvent(BuddyEvent::Touch, 150);
+  processBuddyEvent(BuddyEvent::TouchTap, 150);
   expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed, BuddyMood::Grumpy);
 }
 }  // namespace

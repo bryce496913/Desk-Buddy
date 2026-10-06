@@ -144,13 +144,13 @@ int main() {
   assert(soundReactionStarts == soundStartsBeforeMood);
   assert(soundReactionStops == soundStopsBeforeMood);
   setDiagnosticMood(BuddyMood::Engaged, 100);
-  processBuddyEvent(BuddyEvent::Touch, 401);
+  processBuddyEvent(BuddyEvent::TouchTap, 401);
   assert(lastExpression == FaceExpression::Happy);
   setDiagnosticMood(BuddyMood::Sleepy, 100);
-  processBuddyEvent(BuddyEvent::Touch, 402);
+  processBuddyEvent(BuddyEvent::TouchTap, 402);
   assert(lastExpression == FaceExpression::Annoyed);
   setDiagnosticMood(BuddyMood::Calm, 100);
-  processBuddyEvent(BuddyEvent::Touch, 403);
+  processBuddyEvent(BuddyEvent::TouchTap, 403);
   assert(lastExpression == FaceExpression::Annoyed);
 
   // Nor does it alter the independent real sound streak.

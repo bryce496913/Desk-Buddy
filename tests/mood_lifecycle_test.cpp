@@ -55,7 +55,7 @@ void finishAt(uint32_t now) {
 
 void buildGrumpy() {
   for (uint32_t now = 100; now <= 104; ++now) {
-    processBuddyEvent(BuddyEvent::Touch, now);
+    processBuddyEvent(BuddyEvent::TouchTap, now);
   }
   expectMood(104, BuddyMood::Grumpy, 60, 75, 0);
 }
@@ -63,10 +63,10 @@ void buildGrumpy() {
 void testFriendlyEngagementThenCalm() {
   beginAt();
   expectMood(0, BuddyMood::Calm, 0, 0, 0);
-  processBuddyEvent(BuddyEvent::Touch, 100);
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
   expectMood(100, BuddyMood::Calm, 20, 0, 0);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
-  processBuddyEvent(BuddyEvent::Touch, 200);
+  processBuddyEvent(BuddyEvent::TouchTap, 200);
   expectMood(200, BuddyMood::Engaged, 45, 0, 0);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   finishAt(201);
@@ -76,16 +76,55 @@ void testFriendlyEngagementThenCalm() {
   expectMood(20000, BuddyMood::Calm, 35, 0, 19800);
 }
 
+void testTapAndHoldTemporaryEquivalence() {
+  for (BuddyEvent event : {BuddyEvent::TouchTap, BuddyEvent::TouchHold}) {
+    beginAt();
+    processBuddyEvent(event, 100);
+    expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+    expectMood(100, BuddyMood::Calm, 20, 0, 0);
+    processBuddyEvent(event, 200);
+    expectReaction(FaceExpression::Curious, ReactionSound::Curious);
+    expectMood(200, BuddyMood::Engaged, 45, 0, 0);
+    processBuddyEvent(event, 300);
+    expectReaction(FaceExpression::Curious, ReactionSound::Curious);
+    expectMood(300, BuddyMood::Engaged, 50, 25, 0);
+    finishAt(301);
+    expectMood(301, BuddyMood::Engaged, 50, 25, 1);
+    processBuddyEvent(event, 6301);  // Same streak expiration for both events.
+    expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+    expectMood(6301, BuddyMood::Engaged, 70, 25, 0);
+
+    processBuddyEvent(BuddyEvent::ButtonPressed, 6400);
+    const int facesBefore = faceStarts;
+    const int soundsBefore = soundStarts;
+    processBuddyEvent(event, 6500);
+    assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
+    assert(getBuddyReaction() == BuddyReaction::Idle);
+    expectMood(6500, BuddyMood::Engaged, 70, 25, 0);
+    assert(faceStarts == facesBefore && soundStarts == soundsBefore);
+  }
+
+  // Tap and Hold share the existing touch history, rather than separate streaks.
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
+  processBuddyEvent(BuddyEvent::TouchHold, 200);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
+  expectMood(200, BuddyMood::Engaged, 45, 0, 0);
+  processBuddyEvent(BuddyEvent::TouchTap, 300);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
+  expectMood(300, BuddyMood::Engaged, 50, 25, 0);
+}
+
 void testExcessiveAttentionAndRecovery() {
   beginAt();
-  processBuddyEvent(BuddyEvent::Touch, 100);
-  processBuddyEvent(BuddyEvent::Touch, 101);
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
+  processBuddyEvent(BuddyEvent::TouchTap, 101);
   expectMood(101, BuddyMood::Engaged, 45, 0, 0);
-  processBuddyEvent(BuddyEvent::Touch, 102);
+  processBuddyEvent(BuddyEvent::TouchTap, 102);
   expectMood(102, BuddyMood::Engaged, 50, 25, 0);
-  processBuddyEvent(BuddyEvent::Touch, 103);
+  processBuddyEvent(BuddyEvent::TouchTap, 103);
   expectMood(103, BuddyMood::Engaged, 55, 50, 0);
-  processBuddyEvent(BuddyEvent::Touch, 104);
+  processBuddyEvent(BuddyEvent::TouchTap, 104);
   expectMood(104, BuddyMood::Grumpy, 60, 75, 0);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   finishAt(105);
@@ -120,10 +159,10 @@ void testInactivityThroughAutonomousReactions() {
 void testSleepyTouchAndSoundAlertness() {
   beginAt();
   updateBehaviorEngine(90000);
-  processBuddyEvent(BuddyEvent::Touch, 90001);
+  processBuddyEvent(BuddyEvent::TouchTap, 90001);
   expectMood(90001, BuddyMood::Calm, 20, 0, 0);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
-  processBuddyEvent(BuddyEvent::Touch, 90002);
+  processBuddyEvent(BuddyEvent::TouchTap, 90002);
   expectMood(90002, BuddyMood::Engaged, 45, 0, 0);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
 
@@ -169,8 +208,8 @@ void testPhysicalSleepPausesScoresAndInactivity() {
 void testRolloverForDecayAndInactivity() {
   constexpr uint32_t anchor = std::numeric_limits<uint32_t>::max() - 5000;
   beginAt(anchor);
-  processBuddyEvent(BuddyEvent::Touch, anchor + 1);
-  processBuddyEvent(BuddyEvent::Touch, anchor + 2);
+  processBuddyEvent(BuddyEvent::TouchTap, anchor + 1);
+  processBuddyEvent(BuddyEvent::TouchTap, anchor + 2);
   finishAt(anchor + 3);
   updateBehaviorEngine(anchor + uint32_t{10000});
   expectMood(anchor + uint32_t{10000}, BuddyMood::Engaged, 40, 0, 9998);
@@ -187,7 +226,7 @@ void testRolloverForDecayAndInactivity() {
 void testScoreBoundsAndReadOnlyTelemetry() {
   beginAt();
   for (uint32_t now = 1; now <= 1000; ++now) {
-    processBuddyEvent(BuddyEvent::Touch, now);
+    processBuddyEvent(BuddyEvent::TouchTap, now);
     const DiagnosticMoodState state = getDiagnosticMoodState(now);
     assert(state.engagementScore <= 100 && state.irritationScore <= 100);
   }
@@ -213,15 +252,15 @@ void testGrumpyReactionContext() {
   beginAt();
   buildGrumpy();
   finishAt(105);
-  processBuddyEvent(BuddyEvent::Touch, 6105);  // Streak expired, mood retained.
+  processBuddyEvent(BuddyEvent::TouchTap, 6105);  // Streak expired, mood retained.
   expectMood(6105, BuddyMood::Grumpy, 80, 75, 0);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
 }
 
 void testAutomaticMoodContextForIdenticalFirstSounds() {
   beginAt();
-  processBuddyEvent(BuddyEvent::Touch, 100);
-  processBuddyEvent(BuddyEvent::Touch, 101);
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
+  processBuddyEvent(BuddyEvent::TouchTap, 101);
   finishAt(102);
   updateBehaviorEngine(6102);  // Touch streak expired, engagement retained.
   expectMood(6102, BuddyMood::Engaged, 45, 0, 6001);
@@ -230,7 +269,7 @@ void testAutomaticMoodContextForIdenticalFirstSounds() {
   expectMood(6103, BuddyMood::Engaged, 50, 0, 0);
 
   for (uint32_t now = 6104; now <= 6108; ++now) {
-    processBuddyEvent(BuddyEvent::Touch, now);
+    processBuddyEvent(BuddyEvent::TouchTap, now);
   }
   expectMood(6108, BuddyMood::Grumpy, 100, 75, 0);
   finishAt(6109);
@@ -279,6 +318,7 @@ void ignoreSoundSensorAfterWake() {}
 
 int main() {
   testFriendlyEngagementThenCalm();
+  testTapAndHoldTemporaryEquivalence();
   testExcessiveAttentionAndRecovery();
   testInactivityThroughAutonomousReactions();
   testSleepyTouchAndSoundAlertness();
