@@ -704,6 +704,107 @@ void testContextTouchAndSoundMappings() {
   // This distinguishes arrival mood from post-event mood without instrumentation.
 }
 
+void testRecentTouchSoundTables() {
+  const FaceExpression expressions[][4][4] = {
+      {{FaceExpression::Confused, FaceExpression::Suspicious, FaceExpression::Confused, FaceExpression::Confused},
+       {FaceExpression::Curious, FaceExpression::Suspicious, FaceExpression::Confused, FaceExpression::Confused},
+       {FaceExpression::Suspicious, FaceExpression::Annoyed, FaceExpression::Annoyed, FaceExpression::Annoyed},
+       {FaceExpression::Startled, FaceExpression::Startled, FaceExpression::Confused, FaceExpression::Confused}},
+      {{FaceExpression::Curious, FaceExpression::Suspicious, FaceExpression::Confused, FaceExpression::Confused},
+       {FaceExpression::Curious, FaceExpression::Curious, FaceExpression::Suspicious, FaceExpression::Suspicious},
+       {FaceExpression::Curious, FaceExpression::Suspicious, FaceExpression::Annoyed, FaceExpression::Annoyed},
+       {FaceExpression::Startled, FaceExpression::Suspicious, FaceExpression::Confused, FaceExpression::Confused}}};
+  const ReactionSound sounds[][4][4] = {
+      {{ReactionSound::Confused, ReactionSound::Suspicious, ReactionSound::Confused, ReactionSound::Confused},
+       {ReactionSound::Curious, ReactionSound::Suspicious, ReactionSound::Confused, ReactionSound::Confused},
+       {ReactionSound::Suspicious, ReactionSound::Annoyed, ReactionSound::Annoyed, ReactionSound::Annoyed},
+       {ReactionSound::Startled, ReactionSound::Startled, ReactionSound::Confused, ReactionSound::Confused}},
+      {{ReactionSound::Curious, ReactionSound::Suspicious, ReactionSound::Confused, ReactionSound::Confused},
+       {ReactionSound::Curious, ReactionSound::Curious, ReactionSound::Suspicious, ReactionSound::Suspicious},
+       {ReactionSound::Curious, ReactionSound::Suspicious, ReactionSound::Annoyed, ReactionSound::Annoyed},
+       {ReactionSound::Startled, ReactionSound::Suspicious, ReactionSound::Confused, ReactionSound::Confused}}};
+  const BuddyEvent touches[] = {BuddyEvent::TouchTap, BuddyEvent::TouchHold};
+  for (uint8_t touch = 0; touch < 2; ++touch) {
+    for (uint8_t mood = 0; mood < 4; ++mood) {
+      for (uint8_t level = 0; level < 4; ++level) {
+        beginAt();
+        for (uint8_t previous = 0; previous < level; ++previous) {
+          processBuddyEvent(BuddyEvent::SoundDetected, 900 + previous);
+        }
+        processBuddyEvent(touches[touch], 1000);
+        // Set arrival mood after the touch's own score effects, retaining memory.
+        setDiagnosticMood(moods[mood], 1000);
+        const DiagnosticMoodState before = getDiagnosticMoodState(1001);
+        processBuddyEvent(BuddyEvent::SoundDetected, 1001);
+        const DiagnosticMoodState after = getDiagnosticMoodState(1001);
+        assert(expression == expressions[touch][mood][level]);
+        assert(sound == sounds[touch][mood][level]);
+        assert(after.engagementScore == before.engagementScore + 5);
+        assert(after.irritationScore == before.irritationScore);
+        assert(after.inactivityMs == 0);
+        assert(after.mood == (moods[mood] == BuddyMood::Sleepy ? BuddyMood::Calm : moods[mood]));
+        const auto context = getDiagnosticRecentInteractionContext(1001);
+        assert(context.type == DiagnosticRecentInteractionType::Sound);
+        assert(context.ageMs == 0 && context.recent);
+      }
+    }
+  }
+}
+
+void testRecentTouchSoundBoundaryAndRollover() {
+  const BuddyEvent touches[] = {BuddyEvent::TouchTap, BuddyEvent::TouchHold};
+  const uint32_t anchors[] = {1000, std::numeric_limits<uint32_t>::max() - 1000};
+  for (BuddyEvent touch : touches) {
+    for (uint32_t anchor : anchors) {
+      for (uint32_t age : {5000u, 5001u}) {
+        beginAt(anchor);
+        processBuddyEvent(touch, anchor);
+        processBuddyEvent(BuddyEvent::SoundDetected, anchor + age);
+        const bool recent = age == 5000;
+        const FaceExpression expectedExpression = !recent ? FaceExpression::Startled
+            : touch == BuddyEvent::TouchTap ? FaceExpression::Confused : FaceExpression::Curious;
+        const ReactionSound expectedSound = !recent ? ReactionSound::Startled
+            : touch == BuddyEvent::TouchTap ? ReactionSound::Confused : ReactionSound::Curious;
+        // Sound's +5 stays Calm for both single Tap and single Hold.
+        expectReaction(expectedExpression, expectedSound, BuddyMood::Calm);
+      }
+    }
+  }
+}
+
+void testSoundUsesOnlyImmediatelyPreviousTouch() {
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchHold, 1000);
+  processBuddyEvent(BuddyEvent::SoundDetected, 1001);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Calm);
+  processBuddyEvent(BuddyEvent::SoundDetected, 1002);
+  // Arrival Calm: baseline second sound, even though +5 now makes Engaged.
+  expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious, BuddyMood::Engaged);
+
+  beginAt();
+  setDiagnosticMood(BuddyMood::Grumpy, 100);
+  processBuddyEvent(BuddyEvent::SoundDetected, 101);
+  expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious, BuddyMood::Grumpy);
+  beginAt();
+  setDiagnosticMood(BuddyMood::Grumpy, 100);
+  processBuddyEvent(BuddyEvent::TouchHold, 101);
+  setDiagnosticMood(BuddyMood::Grumpy, 101);
+  processBuddyEvent(BuddyEvent::SoundDetected, 102);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Grumpy);
+  processBuddyEvent(BuddyEvent::SoundDetected, 103);
+  expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed, BuddyMood::Grumpy);
+
+  // A late Hold must not refresh sound history; the next sound restarts at 1.
+  beginAt();
+  processBuddyEvent(BuddyEvent::SoundDetected, 1000);
+  processBuddyEvent(BuddyEvent::TouchHold, 10000);
+  setDiagnosticMood(BuddyMood::Engaged, 10000);
+  processBuddyEvent(BuddyEvent::SoundDetected, 11001);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Engaged);
+  processBuddyEvent(BuddyEvent::SoundDetected, 11002);
+  expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious, BuddyMood::Engaged);
+}
+
 void testFirstSoundComparisonAndThresholdCrossing() {
   const FaceExpression expressions[] = {FaceExpression::Startled,
       FaceExpression::Curious, FaceExpression::Suspicious, FaceExpression::Startled};
@@ -842,6 +943,9 @@ int main() {
   testPhysicalSleepResetsWakingInactivity();
   testInactivityRolloverAndReinitialization();
   testContextTouchAndSoundMappings();
+  testRecentTouchSoundTables();
+  testRecentTouchSoundBoundaryAndRollover();
+  testSoundUsesOnlyImmediatelyPreviousTouch();
   testFirstSoundComparisonAndThresholdCrossing();
   testSleepySecondSoundUsesArrivalMood();
   testDirectDiagnosticReactionsIgnoreMoodContext();

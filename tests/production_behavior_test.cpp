@@ -206,7 +206,7 @@ void testAutonomousPersonalityAndHistories() {
   processBuddyEvent(BuddyEvent::TouchTap, 41610);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
   processBuddyEvent(BuddyEvent::SoundDetected, 41620);
-  expectReaction(FaceExpression::Startled, ReactionSound::Startled);
+  expectReaction(FaceExpression::Confused, ReactionSound::Confused);
 }
 
 void testInteractionPostponesAutonomy() {
