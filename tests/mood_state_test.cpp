@@ -70,7 +70,10 @@ void testTouchCoexistenceAndCompletion() {
     processBuddyEvent(BuddyEvent::Touch, 110);
     const BuddyMood moodAfterTouch =
         mood == BuddyMood::Sleepy ? BuddyMood::Calm : mood;
-    expectReaction(FaceExpression::Happy, ReactionSound::Happy, moodAfterTouch);
+    const bool curious = mood == BuddyMood::Grumpy || mood == BuddyMood::Sleepy;
+    expectReaction(curious ? FaceExpression::Curious : FaceExpression::Happy,
+                   curious ? ReactionSound::Curious : ReactionSound::Happy,
+                   moodAfterTouch);
     updateBehaviorEngine(111);
     expectState(BuddyCoreState::Awake, BuddyReaction::Generic, moodAfterTouch);
     assert(faceFinishes == 0);
@@ -88,10 +91,10 @@ void testTouchLadderPreservesMood() {
   beginAt();
   setDiagnosticMood(BuddyMood::Engaged, 100);
   const FaceExpression expressions[] = {FaceExpression::Happy,
-                                        FaceExpression::Curious,
-                                        FaceExpression::Annoyed};
-  const ReactionSound sounds[] = {ReactionSound::Happy, ReactionSound::Curious,
-                                  ReactionSound::Annoyed};
+                                        FaceExpression::Happy,
+                                        FaceExpression::Curious};
+  const ReactionSound sounds[] = {ReactionSound::Happy, ReactionSound::Happy,
+                                  ReactionSound::Curious};
   for (uint8_t index = 0; index < 3; ++index) {
     processBuddyEvent(BuddyEvent::Touch, 110 + index);
     expectReaction(expressions[index], sounds[index], BuddyMood::Engaged);
@@ -161,7 +164,7 @@ void testMoodChangesPreserveHistories() {
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
   setDiagnosticMood(BuddyMood::Grumpy, 100);
   processBuddyEvent(BuddyEvent::Touch, 6110);  // Original touch window boundary.
-  expectReaction(FaceExpression::Curious, ReactionSound::Curious,
+  expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed,
                  BuddyMood::Grumpy);
 
   processBuddyEvent(BuddyEvent::SoundDetected, 6120);
@@ -193,11 +196,11 @@ void testFreshTouchProgressionAndSaturation() {
                                      BuddyMood::Engaged, BuddyMood::Engaged,
                                      BuddyMood::Grumpy};
   const FaceExpression expressions[] = {
-      FaceExpression::Happy, FaceExpression::Curious, FaceExpression::Annoyed,
-      FaceExpression::Annoyed, FaceExpression::Annoyed};
+      FaceExpression::Happy, FaceExpression::Curious, FaceExpression::Curious,
+      FaceExpression::Curious, FaceExpression::Curious};
   const ReactionSound sounds[] = {
-      ReactionSound::Happy, ReactionSound::Curious, ReactionSound::Annoyed,
-      ReactionSound::Annoyed, ReactionSound::Annoyed};
+      ReactionSound::Happy, ReactionSound::Curious, ReactionSound::Curious,
+      ReactionSound::Curious, ReactionSound::Curious};
   for (uint8_t index = 0; index < 5; ++index) {
     processBuddyEvent(BuddyEvent::Touch, 110 + index);
     expectReaction(expressions[index], sounds[index], expectedMoods[index]);
@@ -226,7 +229,7 @@ void testExpiredTouchWindowPreservesScores() {
     processBuddyEvent(BuddyEvent::Touch, now);
   }
   processBuddyEvent(BuddyEvent::Touch, 6115);
-  expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Grumpy);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Grumpy);
 }
 
 void testSoundAndIdleEventsPreserveAccumulatedMood() {
@@ -260,7 +263,8 @@ void testSoundAndIdleEventsPreserveAccumulatedMood() {
     updateBehaviorEngine(9999);
     expectState(BuddyCoreState::Awake, BuddyReaction::Idle, mood);
     processBuddyEvent(BuddyEvent::Touch, 10000);
-    expectReaction(FaceExpression::Happy, ReactionSound::Happy, mood);
+    expectReaction(mood == BuddyMood::Grumpy ? FaceExpression::Curious : FaceExpression::Happy,
+                   mood == BuddyMood::Grumpy ? ReactionSound::Curious : ReactionSound::Happy, mood);
   }
 }
 
@@ -286,10 +290,10 @@ void testSleepWakePreservesAccumulatedScores() {
   processBuddyEvent(BuddyEvent::Touch, 140);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
   processBuddyEvent(BuddyEvent::Touch, 150);
-  expectReaction(FaceExpression::Curious, ReactionSound::Curious,
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy,
                  BuddyMood::Engaged);
   processBuddyEvent(BuddyEvent::Touch, 160);
-  expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed,
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious,
                  BuddyMood::Grumpy);
   processBuddyEvent(BuddyEvent::ButtonPressed, 170);
   expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, BuddyMood::Grumpy);
@@ -314,7 +318,7 @@ void testDiagnosticCanonicalScores() {
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
   setDiagnosticMood(BuddyMood::Grumpy, 100);
   processBuddyEvent(BuddyEvent::Touch, 18123);
-  expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Grumpy);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Grumpy);
 
   setDiagnosticMood(BuddyMood::Sleepy, 18123);
   updateBehaviorEngine(18124);
@@ -508,7 +512,7 @@ void testSleepyAlertingAndSoundDelta() {
   beginAt(0);
   updateBehaviorEngine(90000);
   processBuddyEvent(BuddyEvent::Touch, 90001);
-  expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Calm);
   processBuddyEvent(BuddyEvent::Touch, 90002);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious,
                  BuddyMood::Engaged);
@@ -640,13 +644,17 @@ void testInactivityRolloverAndReinitialization() {
   assert(getBuddyMood() == BuddyMood::Sleepy);
 }
 
-void testV1ReactionMappingsForEveryMood() {
-  const FaceExpression touchExpressions[] = {
-      FaceExpression::Happy, FaceExpression::Curious, FaceExpression::Annoyed,
-      FaceExpression::Annoyed};
-  const ReactionSound touchSounds[] = {
-      ReactionSound::Happy, ReactionSound::Curious, ReactionSound::Annoyed,
-      ReactionSound::Annoyed};
+void testContextTouchAndV1SoundMappings() {
+  const FaceExpression touchExpressions[][4] = {
+      {FaceExpression::Happy, FaceExpression::Curious, FaceExpression::Annoyed, FaceExpression::Annoyed},
+      {FaceExpression::Happy, FaceExpression::Happy, FaceExpression::Curious, FaceExpression::Curious},
+      {FaceExpression::Curious, FaceExpression::Annoyed, FaceExpression::Annoyed, FaceExpression::Annoyed},
+      {FaceExpression::Curious, FaceExpression::Curious, FaceExpression::Annoyed, FaceExpression::Annoyed}};
+  const ReactionSound touchSounds[][4] = {
+      {ReactionSound::Happy, ReactionSound::Curious, ReactionSound::Annoyed, ReactionSound::Annoyed},
+      {ReactionSound::Happy, ReactionSound::Happy, ReactionSound::Curious, ReactionSound::Curious},
+      {ReactionSound::Curious, ReactionSound::Annoyed, ReactionSound::Annoyed, ReactionSound::Annoyed},
+      {ReactionSound::Curious, ReactionSound::Curious, ReactionSound::Annoyed, ReactionSound::Annoyed}};
   const FaceExpression soundExpressions[] = {
       FaceExpression::Startled, FaceExpression::Suspicious, FaceExpression::Confused,
       FaceExpression::Confused};
@@ -661,8 +669,8 @@ void testV1ReactionMappingsForEveryMood() {
       setDiagnosticMood(mood, 110 + index);
       processBuddyEvent(BuddyEvent::Touch, 110 + index);
       assert(getBuddyReaction() == BuddyReaction::Generic);
-      assert(expression == touchExpressions[index]);
-      assert(sound == touchSounds[index]);
+      assert(expression == touchExpressions[static_cast<uint8_t>(mood)][index]);
+      assert(sound == touchSounds[static_cast<uint8_t>(mood)][index]);
       if (index == 0 && mood == BuddyMood::Sleepy) {
         assert(getBuddyMood() == BuddyMood::Calm);
       }
@@ -680,9 +688,19 @@ void testV1ReactionMappingsForEveryMood() {
       }
     }
   }
-  // Mood is intentionally ignored by selectors in Pass 3A. Their captured
-  // pre-event argument is documented at each call site; later mood-specific
-  // mappings can verify that distinction behaviorally without a debug API.
+  // Sleepy + first touch selects Curious although that touch makes mood Calm.
+  // This distinguishes arrival mood from post-event mood without instrumentation.
+}
+
+void testDirectDiagnosticReactionsIgnoreMoodContext() {
+  for (BuddyMood mood : moods) {
+    beginAt();
+    setDiagnosticMood(mood, 100);
+    triggerDiagnostic(DiagnosticReaction::Happy, 110);
+    expectReaction(FaceExpression::Happy, ReactionSound::Happy, mood);
+    triggerDiagnostic(DiagnosticReaction::Annoyed, 120);
+    expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed, mood);
+  }
 }
 }  // namespace
 
@@ -755,6 +773,7 @@ int main() {
   testAutonomousAndDiagnosticReactionsAreNotActivity();
   testPhysicalSleepResetsWakingInactivity();
   testInactivityRolloverAndReinitialization();
-  testV1ReactionMappingsForEveryMood();
+  testContextTouchAndV1SoundMappings();
+  testDirectDiagnosticReactionsIgnoreMoodContext();
   return 0;
 }

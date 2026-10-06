@@ -73,16 +73,16 @@ void testTouchWindowAndSaturation() {
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   assert(getBuddyMood() == BuddyMood::Engaged);
   processBuddyEvent(BuddyEvent::Touch, 12099);
-  expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   processBuddyEvent(BuddyEvent::Touch, 18099);
-  expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
 
-  // Further recent touches stay at the saturated Annoyed level.
+  // Streak remains saturated; pre-event Engaged selects Curious.
   processBuddyEvent(BuddyEvent::Touch, 18100);
-  expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   assert(getBuddyMood() == BuddyMood::Grumpy);
   processBuddyEvent(BuddyEvent::Touch, 24101);  // More than 6000 ms later.
-  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   assert(getBuddyMood() == BuddyMood::Grumpy);
 }
 
