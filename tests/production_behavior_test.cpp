@@ -110,7 +110,7 @@ void testIndependentHistoriesAndReplacement() {
   processBuddyEvent(BuddyEvent::Touch, 20);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   processBuddyEvent(BuddyEvent::SoundDetected, 30);
-  expectReaction(FaceExpression::Startled, ReactionSound::Startled);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
 
   beginAt(100);
   processBuddyEvent(BuddyEvent::SoundDetected, 110);
@@ -131,7 +131,7 @@ void testIndependentHistoriesAndReplacement() {
 
   // The other interaction type can replace it as well.
   processBuddyEvent(BuddyEvent::SoundDetected, 230);
-  expectReaction(FaceExpression::Startled, ReactionSound::Startled);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   assert(faceReactionStarts == 3);
   assert(soundReactionStarts == 3);
 
@@ -173,7 +173,7 @@ void testSleepWakeAndHistoryReset() {
   processBuddyEvent(BuddyEvent::Touch, 110);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
   processBuddyEvent(BuddyEvent::SoundDetected, 120);
-  expectReaction(FaceExpression::Startled, ReactionSound::Startled);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
 }
 
 void testAutonomousPersonalityAndHistories() {

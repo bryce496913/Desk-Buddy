@@ -47,7 +47,17 @@ ReactionPlan selectTouchReaction(BuddyMood mood, uint8_t streak) {
 }
 
 ReactionPlan selectSoundReaction(BuddyMood mood, uint8_t streak) {
-  (void)mood;  // Pass 3A keeps the V1 mapping for every mood.
+  if (mood == BuddyMood::Grumpy) {
+    return streak == 1
+        ? ReactionPlan{FaceExpression::Suspicious, ReactionSound::Suspicious}
+        : ReactionPlan{FaceExpression::Annoyed, ReactionSound::Annoyed};
+  }
+  if (mood == BuddyMood::Engaged && streak == 1) {
+    return {FaceExpression::Curious, ReactionSound::Curious};
+  }
+  if (mood == BuddyMood::Sleepy && streak <= 2) {
+    return {FaceExpression::Startled, ReactionSound::Startled};
+  }
   if (streak == 1) {
     return {FaceExpression::Startled, ReactionSound::Startled};
   }

@@ -163,7 +163,7 @@ int main() {
   assert(lastExpression == FaceExpression::Startled);
   setDiagnosticMood(BuddyMood::Grumpy, 100);
   processBuddyEvent(BuddyEvent::SoundDetected, 502);
-  assert(lastExpression == FaceExpression::Suspicious);
+  assert(lastExpression == FaceExpression::Annoyed);
   setDiagnosticMood(BuddyMood::Engaged, 100);
   processBuddyEvent(BuddyEvent::SoundDetected, 503);
   assert(lastExpression == FaceExpression::Confused);
