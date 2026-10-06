@@ -48,6 +48,15 @@ BuddyReaction getBuddyReaction();
 BuddyMood getBuddyMood();
 
 #if DESK_BUDDY_DIAGNOSTICS
+struct DiagnosticMoodState {
+  BuddyMood mood;
+  uint8_t engagementScore;
+  uint8_t irritationScore;
+  // Waking inactivity only; zero while physical sleep pauses the clock.
+  uint32_t inactivityMs;
+};
+
+DiagnosticMoodState getDiagnosticMoodState(uint32_t now);
 void setDiagnosticMood(BuddyMood mood, uint32_t now);
 bool triggerDiagnosticReaction(DiagnosticReaction reaction,
                                DiagnosticSoundVariant variant, uint32_t now,

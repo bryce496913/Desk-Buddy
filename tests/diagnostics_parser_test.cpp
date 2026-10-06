@@ -15,6 +15,8 @@ int triggerCount = 0;
 BuddyMood currentMood = BuddyMood::Calm;
 int moodSetCount = 0;
 uint32_t lastMoodSetAt = 0;
+uint32_t lastTelemetryAt = 0;
+int telemetryReadCount = 0;
 BuddyCoreState coreState = BuddyCoreState::Awake;
 
 void sendCommand(const char* command) {
@@ -27,6 +29,12 @@ void sendCommand(const char* command) {
 
 BuddyCoreState getBuddyCoreState() { return coreState; }
 BuddyMood getBuddyMood() { return currentMood; }
+DiagnosticMoodState getDiagnosticMoodState(uint32_t now) {
+  lastTelemetryAt = now;
+  telemetryReadCount++;
+  return {currentMood, 45, 7,
+          coreState == BuddyCoreState::Sleeping ? uint32_t{0} : uint32_t{3200}};
+}
 void setDiagnosticMood(BuddyMood mood, uint32_t now) {
   lastMoodSetAt = now;
   currentMood = mood;
@@ -110,7 +118,9 @@ int main() {
   const int triggersBeforeMood = triggerCount;
   Serial.clearOutput();
   sendCommand("m?");
-  assert(Serial.output == "DIAG: Mood = Calm\n");
+  assert(Serial.output == "DIAG: Mood = Calm | Engagement = 45 | Irritation = 7 | Inactive = 3200 ms\n");
+  assert(lastTelemetryAt == 200);
+  assert(telemetryReadCount == 1);
   assert(moodSetCount == 0);
 
   const BuddyMood moods[] = {BuddyMood::Calm, BuddyMood::Engaged,
@@ -127,11 +137,17 @@ int main() {
     assert(Serial.output == expected);
     Serial.clearOutput();
     sendCommand("m?");
-    assert(Serial.output == expected);
+    assert(Serial.output == std::string("DIAG: Mood = ") + names[index] +
+        " | Engagement = 45 | Irritation = 7 | Inactive = 3200 ms\n");
     assert(moodSetCount == index + 1);
     assert(lastMoodSetAt == 200);
   }
   assert(triggerCount == triggersBeforeMood);
+  Serial.clearOutput();
+  const int readsBeforeIdle = telemetryReadCount;
+  updateDiagnostics(250);
+  assert(Serial.output.empty());
+  assert(telemetryReadCount == readsBeforeIdle);
 
   // A selector can arrive in a later loop, with no mutation while pending.
   Serial.clearOutput();
@@ -169,7 +185,7 @@ int main() {
   coreState = BuddyCoreState::Sleeping;
   Serial.clearOutput();
   sendCommand("m?");
-  assert(Serial.output == "DIAG: Mood = Grumpy\n");
+  assert(Serial.output == "DIAG: Mood = Grumpy | Engagement = 45 | Irritation = 7 | Inactive = 0 ms\n");
   assert(moodSetCount == 5);
   sendCommand("mc");
   sendCommand("mg");

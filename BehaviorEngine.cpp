@@ -301,6 +301,13 @@ BuddyReaction getBuddyReaction() { return activeReaction; }
 BuddyMood getBuddyMood() { return currentMood; }
 
 #if DESK_BUDDY_DIAGNOSTICS
+DiagnosticMoodState getDiagnosticMoodState(uint32_t now) {
+  return {currentMood, engagementScore, irritationScore,
+          coreState == BuddyCoreState::Awake
+              ? static_cast<uint32_t>(now - lastMeaningfulActivityAt)
+              : 0};
+}
+
 void setDiagnosticMood(BuddyMood mood, uint32_t now) {
   lastMoodDecayAt = now;
   engagementScore = mood == BuddyMood::Engaged ? ENGAGED_THRESHOLD : 0;

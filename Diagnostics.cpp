@@ -25,6 +25,19 @@ void printCurrentMood() {
   Serial.println(moodName(getBuddyMood()));
 }
 
+void printMoodTelemetry(uint32_t now) {
+  const DiagnosticMoodState state = getDiagnosticMoodState(now);
+  Serial.print("DIAG: Mood = ");
+  Serial.print(moodName(state.mood));
+  Serial.print(" | Engagement = ");
+  Serial.print(static_cast<unsigned int>(state.engagementScore));
+  Serial.print(" | Irritation = ");
+  Serial.print(static_cast<unsigned int>(state.irritationScore));
+  Serial.print(" | Inactive = ");
+  Serial.print(state.inactivityMs);
+  Serial.println(" ms");
+}
+
 const char* variantName(DiagnosticSoundVariant variant) {
   switch (variant) {
     case DiagnosticSoundVariant::Random: return "Random";
@@ -59,7 +72,7 @@ void printDiagnosticHelp() {
   Serial.println("?: Help");
   Serial.println();
   Serial.println("Mood:");
-  Serial.println("m?: Current mood");
+  Serial.println("m?: Current mood, scores, waking inactivity (0 while sleeping)");
   Serial.println("mc: Calm");
   Serial.println("me: Engaged");
   Serial.println("mg: Grumpy");
@@ -92,7 +105,7 @@ void updateDiagnostics(uint32_t now) {
   if (moodSelectorPending) {
     moodSelectorPending = false;
     switch (command) {
-      case '?': printCurrentMood(); return;
+      case '?': printMoodTelemetry(now); return;
       case 'c': setDiagnosticMood(BuddyMood::Calm, now); break;
       case 'e': setDiagnosticMood(BuddyMood::Engaged, now); break;
       case 'g': setDiagnosticMood(BuddyMood::Grumpy, now); break;

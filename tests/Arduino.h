@@ -34,6 +34,12 @@ class HardwareSerial {
   void clearOutput() { output.clear(); }
 
   void print(const char *value) { output += value; }
+  template <typename T>
+  void print(T value) {
+    std::ostringstream stream;
+    stream << value;
+    output += stream.str();
+  }
   void println() { output += '\n'; }
   void println(const char *value) {
     output += value;
