@@ -9,6 +9,9 @@ constexpr uint32_t TOUCH_REPEAT_WINDOW_MS = 6000;
 constexpr uint32_t SOUND_REPEAT_WINDOW_MS = 10000;
 constexpr uint32_t IDLE_PERSONALITY_MIN_MS = 20000;
 constexpr uint32_t IDLE_PERSONALITY_MAX_MS = 40001;
+constexpr uint8_t MAX_MOOD_SCORE = 100;
+constexpr uint8_t ENGAGED_THRESHOLD = 40;
+constexpr uint8_t GRUMPY_THRESHOLD = 60;
 
 enum class IdlePersonality : uint8_t {
   Curious,
@@ -18,6 +21,8 @@ enum class IdlePersonality : uint8_t {
 BuddyCoreState coreState = BuddyCoreState::Awake;
 BuddyReaction activeReaction = BuddyReaction::Idle;
 BuddyMood currentMood = BuddyMood::Calm;
+uint8_t engagementScore = 0;
+uint8_t irritationScore = 0;
 uint32_t lastTouchAt = 0;
 uint8_t touchStreak = 0;
 uint32_t lastSoundAt = 0;
@@ -27,6 +32,22 @@ bool idlePersonalityScheduled = false;
 bool autonomousReactionActive = false;
 IdlePersonality lastIdlePersonality = IdlePersonality::Curious;
 bool hasLastIdlePersonality = false;
+
+void increaseScore(uint8_t &score, uint8_t amount) {
+  const uint16_t increased = static_cast<uint16_t>(score) + amount;
+  score = increased > MAX_MOOD_SCORE ? MAX_MOOD_SCORE
+                                    : static_cast<uint8_t>(increased);
+}
+
+void updateMoodFromScores() {
+  if (irritationScore >= GRUMPY_THRESHOLD) {
+    currentMood = BuddyMood::Grumpy;
+  } else if (engagementScore >= ENGAGED_THRESHOLD) {
+    currentMood = BuddyMood::Engaged;
+  } else {
+    currentMood = BuddyMood::Calm;
+  }
+}
 
 bool timeReached(uint32_t now, uint32_t deadline) {
   return static_cast<int32_t>(now - deadline) >= 0;
@@ -114,6 +135,8 @@ void beginBehaviorEngine(uint32_t now) {
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
   currentMood = BuddyMood::Calm;
+  engagementScore = 0;
+  irritationScore = 0;
   resetTouchHistory();
   resetSoundHistory();
   scheduleFaceBehavior(now);
@@ -163,6 +186,16 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
           touchStreak++;
         }
         lastTouchAt = now;
+
+        if (touchStreak == 1) {
+          increaseScore(engagementScore, 20);
+        } else if (touchStreak == 2) {
+          increaseScore(engagementScore, 25);
+        } else {
+          increaseScore(engagementScore, 5);
+          increaseScore(irritationScore, 25);
+        }
+        updateMoodFromScores();
 
         if (touchStreak == 1) {
           startGenericReaction(now, FaceExpression::Happy,
@@ -219,7 +252,12 @@ BuddyReaction getBuddyReaction() { return activeReaction; }
 BuddyMood getBuddyMood() { return currentMood; }
 
 #if DESK_BUDDY_DIAGNOSTICS
-void setDiagnosticMood(BuddyMood mood) { currentMood = mood; }
+void setDiagnosticMood(BuddyMood mood) {
+  engagementScore = mood == BuddyMood::Engaged ? ENGAGED_THRESHOLD : 0;
+  irritationScore = mood == BuddyMood::Grumpy ? GRUMPY_THRESHOLD : 0;
+  // A forced Sleepy state persists until a real mood-affecting event.
+  currentMood = mood;
+}
 
 bool triggerDiagnosticReaction(DiagnosticReaction reaction,
                                DiagnosticSoundVariant variant, uint32_t now,
