@@ -231,19 +231,27 @@ struct AutonomousBehaviorPool {
   const WeightedAutonomousBehavior* candidates;
   uint8_t count;
 };
-constexpr WeightedAutonomousBehavior DEFAULT_AUTONOMOUS_POOL[] = {
-    {AutonomousBehavior::Curious, 1}, {AutonomousBehavior::Daydreaming, 1}};
+constexpr WeightedAutonomousBehavior CALM_AUTONOMOUS_POOL[] = {
+    {AutonomousBehavior::Daydreaming, 30}, {AutonomousBehavior::SideGlance, 25},
+    {AutonomousBehavior::Curious, 25}, {AutonomousBehavior::Bored, 20}};
+constexpr WeightedAutonomousBehavior ENGAGED_AUTONOMOUS_POOL[] = {
+    {AutonomousBehavior::ExcitedScanning, 35}, {AutonomousBehavior::Curious, 30},
+    {AutonomousBehavior::SideGlance, 20}, {AutonomousBehavior::Daydreaming, 15}};
+constexpr WeightedAutonomousBehavior GRUMPY_AUTONOMOUS_POOL[] = {
+    {AutonomousBehavior::AnnoyedSquint, 40}, {AutonomousBehavior::SuspiciousGlance, 35},
+    {AutonomousBehavior::SideGlance, 15}, {AutonomousBehavior::Bored, 10}};
+constexpr WeightedAutonomousBehavior SLEEPY_AUTONOMOUS_POOL[] = {
+    {AutonomousBehavior::SleepyDrift, 45}, {AutonomousBehavior::Daydreaming, 30},
+    {AutonomousBehavior::Bored, 20}, {AutonomousBehavior::SideGlance, 5}};
 
 AutonomousBehaviorPool autonomousPoolFor(BuddyMood mood) {
-  // All moods retain the original two choices until expanded behaviors exist.
   switch (mood) {
-    case BuddyMood::Calm:
-    case BuddyMood::Engaged:
-    case BuddyMood::Grumpy:
-    case BuddyMood::Sleepy:
-      return {DEFAULT_AUTONOMOUS_POOL, 2};
+    case BuddyMood::Calm: return {CALM_AUTONOMOUS_POOL, 4};
+    case BuddyMood::Engaged: return {ENGAGED_AUTONOMOUS_POOL, 4};
+    case BuddyMood::Grumpy: return {GRUMPY_AUTONOMOUS_POOL, 4};
+    case BuddyMood::Sleepy: return {SLEEPY_AUTONOMOUS_POOL, 4};
   }
-  return {DEFAULT_AUTONOMOUS_POOL, 2};
+  return {CALM_AUTONOMOUS_POOL, 4};
 }
 
 #if defined(DESK_BUDDY_TEST_AUTONOMOUS_SELECTION)

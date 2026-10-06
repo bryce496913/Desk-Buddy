@@ -62,6 +62,10 @@ run_test "BuddyMood lifecycle" mood_lifecycle \
   "${REPO_ROOT}/tests/mood_lifecycle_test.cpp" \
   "${REPO_ROOT}/BehaviorEngine.cpp"
 
+run_test "weighted autonomous selection" autonomous_weighted_selection \
+  -DDESK_BUDDY_DIAGNOSTICS=1 \
+  "${REPO_ROOT}/tests/autonomous_weighted_selection_test.cpp"
+
 run_test "cross interaction" cross_interaction \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
   "${REPO_ROOT}/tests/cross_interaction_test.cpp" \

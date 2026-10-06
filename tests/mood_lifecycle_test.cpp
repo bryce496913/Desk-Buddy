@@ -1,3 +1,4 @@
+#include "autonomous_test_helpers.h"
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -245,8 +246,7 @@ void testInactivityThroughAutonomousReactions() {
   for (uint32_t now : deadlines) {
     updateBehaviorEngine(now);
     processBuddyEvent(BuddyEvent::IdleTimeout, now);
-    assert(expression == FaceExpression::Curious ||
-           expression == FaceExpression::Daydreaming);
+    assert(isAutonomousExpressionForMood(expression, getBuddyMood()));
     expectMood(now, BuddyMood::Calm, 0, 0, now);
     finishAt(now + 1);
     expectMood(now + 1, BuddyMood::Calm, 0, 0, now + 1);
@@ -469,7 +469,7 @@ void testAutonomousShowcaseIsolation() {
   finishAt(102);
   processBuddyEvent(BuddyEvent::IdleTimeout, 103);
   assert(expression != first);  // Showcase never changes selection history.
-  assert(expression == FaceExpression::Curious || expression == FaceExpression::Daydreaming);
+  assert(isAutonomousExpressionForMood(expression, getBuddyMood()));
 }
 
 void testAutonomousSelectionIsolation() {
@@ -483,7 +483,7 @@ void testAutonomousSelectionIsolation() {
     const auto previous = getDiagnosticRecentInteractionContext(104);
     processBuddyEvent(BuddyEvent::IdleTimeout, 104);
     assert(getTestAutonomousSelectionMood() == mood);
-    assert(expression == FaceExpression::Curious || expression == FaceExpression::Daydreaming);
+    assert(isAutonomousExpressionForMood(expression, getBuddyMood()));
     assert(sound == ReactionSound::None);
     const auto after = getDiagnosticMoodState(104);
     const auto context = getDiagnosticRecentInteractionContext(104);
@@ -529,11 +529,11 @@ void testRecentInteractionExclusionsAndSleep() {
   finishAt(1001);
   processBuddyEvent(BuddyEvent::IdleTimeout, 1100);
   expectRecent(1100, Type::TouchTap, 100, true);
-  assert(expression == FaceExpression::Curious || expression == FaceExpression::Daydreaming);
+  assert(isAutonomousExpressionForMood(expression, getBuddyMood()));
   finishAt(1101);
   processBuddyEvent(BuddyEvent::IdleTimeout, 1200);
   expectRecent(1200, Type::TouchTap, 200, true);
-  assert(expression == FaceExpression::Curious || expression == FaceExpression::Daydreaming);
+  assert(isAutonomousExpressionForMood(expression, getBuddyMood()));
   // Consecutive autonomous reactions exercise both existing personalities.
   finishAt(1201);
   setDiagnosticMood(BuddyMood::Grumpy, 1300);

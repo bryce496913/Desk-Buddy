@@ -1,3 +1,4 @@
+#include "autonomous_test_helpers.h"
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -188,8 +189,7 @@ void testAutonomousPersonalityAndHistories() {
 
   updateBehaviorEngine(21000);
   assert(getBuddyReaction() == BuddyReaction::Generic);
-  assert(requestedExpression == FaceExpression::Curious ||
-         requestedExpression == FaceExpression::Daydreaming);
+  assert(isAutonomousExpressionForMood(requestedExpression, getBuddyMood()));
   assert(getBuddyMood() == BuddyMood::Calm);
   assert(requestedSound == ReactionSound::None);
   assert(!soundEngineActive);
@@ -265,8 +265,7 @@ void testAutonomyDoesNotChangeDecayPolicy() {
     // Last touch schedules the deterministic autonomous deadline.
     updateBehaviorEngine(20099 + touchCount);
     assert(getBuddyReaction() == BuddyReaction::Generic);
-    assert(requestedExpression == FaceExpression::Curious ||
-           requestedExpression == FaceExpression::Daydreaming);
+    assert(isAutonomousExpressionForMood(requestedExpression, getBuddyMood()));
     assert(requestedSound == ReactionSound::None);
     // Two awake decay ticks precede autonomy; the reaction adds no mood effect.
     const BuddyMood decayedMood =
@@ -285,8 +284,7 @@ void testScheduledAutonomyDoesNotPreventSleepy() {
   for (uint32_t deadline : deadlines) {
     updateBehaviorEngine(deadline);
     assert(getBuddyReaction() == BuddyReaction::Generic);
-    assert(requestedExpression == FaceExpression::Curious ||
-           requestedExpression == FaceExpression::Daydreaming);
+    assert(isAutonomousExpressionForMood(requestedExpression, getBuddyMood()));
     assert(requestedSound == ReactionSound::None);
     finishReactionAt(deadline + 100);
   }
@@ -368,7 +366,7 @@ void testRolloverSafeTiming() {
 
 long random(long maximum) {
   assert(maximum > 0);
-  return 0;  // Select Curious; production alternation may select Daydreaming.
+  return 0;  // Select the first eligible weighted candidate.
 }
 
 long random(long minimum, long maximum) {
