@@ -39,8 +39,16 @@ void loop() {
   }
 
   InputEvents inputEvents = updateInputs(now);
-  if (inputEvents.touch != TouchGesture::None) {
-    processBuddyEvent(BuddyEvent::Touch, now);
+  switch (inputEvents.touch) {
+    case TouchGesture::Tap:
+      processBuddyEvent(BuddyEvent::TouchTap, now);
+      break;
+    case TouchGesture::Hold:
+      processBuddyEvent(BuddyEvent::TouchHold, now);
+      break;
+    case TouchGesture::None:
+    default:
+      break;
   }
   if (inputEvents.button) processBuddyEvent(BuddyEvent::ButtonPressed, now);
 

@@ -6,7 +6,8 @@
 
 enum class BuddyCoreState : uint8_t { Awake, Sleeping };
 enum class BuddyEvent : uint8_t {
-  Touch,
+  TouchTap,
+  TouchHold,
   SoundDetected,
   ButtonPressed,
   IdleTimeout

@@ -66,22 +66,22 @@ void finishReactionAt(uint32_t now) {
 
 void testTouchWindowAndSaturation() {
   beginAt(0);
-  processBuddyEvent(BuddyEvent::Touch, 100);
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
   assert(getBuddyMood() == BuddyMood::Calm);
-  processBuddyEvent(BuddyEvent::Touch, 6100);  // Exactly 6000 ms is recent.
+  processBuddyEvent(BuddyEvent::TouchTap, 6100);  // Exactly 6000 ms is recent.
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   assert(getBuddyMood() == BuddyMood::Engaged);
-  processBuddyEvent(BuddyEvent::Touch, 12099);
+  processBuddyEvent(BuddyEvent::TouchTap, 12099);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
-  processBuddyEvent(BuddyEvent::Touch, 18099);
+  processBuddyEvent(BuddyEvent::TouchTap, 18099);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
 
   // Streak remains saturated; pre-event Engaged selects Curious.
-  processBuddyEvent(BuddyEvent::Touch, 18100);
+  processBuddyEvent(BuddyEvent::TouchTap, 18100);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   assert(getBuddyMood() == BuddyMood::Grumpy);
-  processBuddyEvent(BuddyEvent::Touch, 24101);  // More than 6000 ms later.
+  processBuddyEvent(BuddyEvent::TouchTap, 24101);  // More than 6000 ms later.
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   assert(getBuddyMood() == BuddyMood::Grumpy);
 }
@@ -105,9 +105,9 @@ void testSoundWindowAndSaturation() {
 
 void testIndependentHistoriesAndReplacement() {
   beginAt(0);
-  processBuddyEvent(BuddyEvent::Touch, 10);
+  processBuddyEvent(BuddyEvent::TouchTap, 10);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
-  processBuddyEvent(BuddyEvent::Touch, 20);
+  processBuddyEvent(BuddyEvent::TouchTap, 20);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   processBuddyEvent(BuddyEvent::SoundDetected, 30);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
@@ -117,14 +117,14 @@ void testIndependentHistoriesAndReplacement() {
   expectReaction(FaceExpression::Startled, ReactionSound::Startled);
   processBuddyEvent(BuddyEvent::SoundDetected, 120);
   expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious);
-  processBuddyEvent(BuddyEvent::Touch, 130);
+  processBuddyEvent(BuddyEvent::TouchTap, 130);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
 
   // A same-type interaction replaces an unfinished Generic reaction.
   beginAt(200);
-  processBuddyEvent(BuddyEvent::Touch, 210);
+  processBuddyEvent(BuddyEvent::TouchTap, 210);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
-  processBuddyEvent(BuddyEvent::Touch, 220);
+  processBuddyEvent(BuddyEvent::TouchTap, 220);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
   assert(faceReactionStarts == 2);
   assert(soundReactionStarts == 2);
@@ -141,9 +141,9 @@ void testIndependentHistoriesAndReplacement() {
 
 void testSleepWakeAndHistoryReset() {
   beginAt(0);
-  processBuddyEvent(BuddyEvent::Touch, 10);
-  processBuddyEvent(BuddyEvent::Touch, 20);
-  processBuddyEvent(BuddyEvent::Touch, 30);
+  processBuddyEvent(BuddyEvent::TouchTap, 10);
+  processBuddyEvent(BuddyEvent::TouchTap, 20);
+  processBuddyEvent(BuddyEvent::TouchTap, 30);
   processBuddyEvent(BuddyEvent::SoundDetected, 40);
   processBuddyEvent(BuddyEvent::SoundDetected, 50);
   processBuddyEvent(BuddyEvent::SoundDetected, 60);
@@ -159,7 +159,7 @@ void testSleepWakeAndHistoryReset() {
   assert(soundReactionStops >= 1);
   assert(!soundEngineActive);
 
-  processBuddyEvent(BuddyEvent::Touch, 80);
+  processBuddyEvent(BuddyEvent::TouchTap, 80);
   processBuddyEvent(BuddyEvent::SoundDetected, 90);
   assert(getBuddyReaction() == BuddyReaction::Idle);
   assert(faceReactionStarts == startsBeforeSleep);
@@ -170,7 +170,7 @@ void testSleepWakeAndHistoryReset() {
   assert(getBuddyMood() == BuddyMood::Engaged);
   assert(wakeSoundRequests == 1);
   assert(wakeSensorIgnores == 1);
-  processBuddyEvent(BuddyEvent::Touch, 110);
+  processBuddyEvent(BuddyEvent::TouchTap, 110);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
   processBuddyEvent(BuddyEvent::SoundDetected, 120);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
@@ -203,7 +203,7 @@ void testAutonomousPersonalityAndHistories() {
   finishReactionAt(41600);
 
   // Autonomous reactions do not contribute to either interaction streak.
-  processBuddyEvent(BuddyEvent::Touch, 41610);
+  processBuddyEvent(BuddyEvent::TouchTap, 41610);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
   processBuddyEvent(BuddyEvent::SoundDetected, 41620);
   expectReaction(FaceExpression::Startled, ReactionSound::Startled);
@@ -211,7 +211,7 @@ void testAutonomousPersonalityAndHistories() {
 
 void testInteractionPostponesAutonomy() {
   beginAt(0);  // Initial deadline 20000.
-  processBuddyEvent(BuddyEvent::Touch, 19999);  // New deadline 39999.
+  processBuddyEvent(BuddyEvent::TouchTap, 19999);  // New deadline 39999.
   faceReactionFinished = true;
   soundEngineActive = false;
   updateBehaviorEngine(20000);
@@ -240,7 +240,7 @@ void testAutonomyDoesNotChangeDecayPolicy() {
   for (int touchCount : touchCounts) {
     beginAt(0);
     for (int index = 0; index < touchCount; ++index) {
-      processBuddyEvent(BuddyEvent::Touch, 100 + index);
+      processBuddyEvent(BuddyEvent::TouchTap, 100 + index);
     }
     const BuddyMood mood = touchCount == 2 ? BuddyMood::Engaged : BuddyMood::Grumpy;
     assert(getBuddyMood() == mood);
@@ -303,10 +303,10 @@ void testRolloverSafeTiming() {
   constexpr uint32_t max = std::numeric_limits<uint32_t>::max();
 
   beginAt(max - 5000);
-  processBuddyEvent(BuddyEvent::Touch, max - 3000);
-  processBuddyEvent(BuddyEvent::Touch, 1000);  // 4001 ms elapsed.
+  processBuddyEvent(BuddyEvent::TouchTap, max - 3000);
+  processBuddyEvent(BuddyEvent::TouchTap, 1000);  // 4001 ms elapsed.
   expectReaction(FaceExpression::Curious, ReactionSound::Curious);
-  processBuddyEvent(BuddyEvent::Touch, 7001);  // 6001 ms elapsed.
+  processBuddyEvent(BuddyEvent::TouchTap, 7001);  // 6001 ms elapsed.
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
 
   beginAt(max - 5000);
