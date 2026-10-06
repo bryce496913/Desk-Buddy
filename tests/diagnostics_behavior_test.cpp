@@ -148,7 +148,7 @@ int main() {
   assert(lastExpression == FaceExpression::Happy);
   setDiagnosticMood(BuddyMood::Sleepy, 100);
   processBuddyEvent(BuddyEvent::Touch, 402);
-  assert(lastExpression == FaceExpression::Curious);
+  assert(lastExpression == FaceExpression::Annoyed);
   setDiagnosticMood(BuddyMood::Calm, 100);
   processBuddyEvent(BuddyEvent::Touch, 403);
   assert(lastExpression == FaceExpression::Annoyed);

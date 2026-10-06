@@ -649,12 +649,12 @@ void testContextTouchAndV1SoundMappings() {
       {FaceExpression::Happy, FaceExpression::Curious, FaceExpression::Annoyed, FaceExpression::Annoyed},
       {FaceExpression::Happy, FaceExpression::Happy, FaceExpression::Curious, FaceExpression::Curious},
       {FaceExpression::Curious, FaceExpression::Annoyed, FaceExpression::Annoyed, FaceExpression::Annoyed},
-      {FaceExpression::Curious, FaceExpression::Curious, FaceExpression::Annoyed, FaceExpression::Annoyed}};
+      {FaceExpression::Curious, FaceExpression::Annoyed, FaceExpression::Annoyed, FaceExpression::Annoyed}};
   const ReactionSound touchSounds[][4] = {
       {ReactionSound::Happy, ReactionSound::Curious, ReactionSound::Annoyed, ReactionSound::Annoyed},
       {ReactionSound::Happy, ReactionSound::Happy, ReactionSound::Curious, ReactionSound::Curious},
       {ReactionSound::Curious, ReactionSound::Annoyed, ReactionSound::Annoyed, ReactionSound::Annoyed},
-      {ReactionSound::Curious, ReactionSound::Curious, ReactionSound::Annoyed, ReactionSound::Annoyed}};
+      {ReactionSound::Curious, ReactionSound::Annoyed, ReactionSound::Annoyed, ReactionSound::Annoyed}};
   const FaceExpression soundExpressions[] = {
       FaceExpression::Startled, FaceExpression::Suspicious, FaceExpression::Confused,
       FaceExpression::Confused};
@@ -698,9 +698,24 @@ void testDirectDiagnosticReactionsIgnoreMoodContext() {
     setDiagnosticMood(mood, 100);
     triggerDiagnostic(DiagnosticReaction::Happy, 110);
     expectReaction(FaceExpression::Happy, ReactionSound::Happy, mood);
+    triggerDiagnostic(DiagnosticReaction::Curious, 115);
+    expectReaction(FaceExpression::Curious, ReactionSound::Curious, mood);
     triggerDiagnostic(DiagnosticReaction::Annoyed, 120);
     expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed, mood);
   }
+}
+
+void testGrumpyTouchContextAfterPhysicalWake() {
+  beginAt();
+  buildTouchMood(110, 5);
+  assert(getBuddyMood() == BuddyMood::Grumpy);
+  processBuddyEvent(BuddyEvent::ButtonPressed, 120);
+  processBuddyEvent(BuddyEvent::ButtonPressed, 130);
+  expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Grumpy);
+  processBuddyEvent(BuddyEvent::Touch, 140);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Grumpy);
+  processBuddyEvent(BuddyEvent::Touch, 150);
+  expectReaction(FaceExpression::Annoyed, ReactionSound::Annoyed, BuddyMood::Grumpy);
 }
 }  // namespace
 
@@ -775,5 +790,6 @@ int main() {
   testInactivityRolloverAndReinitialization();
   testContextTouchAndV1SoundMappings();
   testDirectDiagnosticReactionsIgnoreMoodContext();
+  testGrumpyTouchContextAfterPhysicalWake();
   return 0;
 }

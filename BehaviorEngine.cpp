@@ -31,15 +31,12 @@ ReactionPlan selectTouchReaction(BuddyMood mood, uint8_t streak) {
         ? ReactionPlan{FaceExpression::Happy, ReactionSound::Happy}
         : ReactionPlan{FaceExpression::Curious, ReactionSound::Curious};
   }
-  if (mood == BuddyMood::Grumpy) {
+  if (mood == BuddyMood::Grumpy || mood == BuddyMood::Sleepy) {
     return streak == 1
         ? ReactionPlan{FaceExpression::Curious, ReactionSound::Curious}
         : ReactionPlan{FaceExpression::Annoyed, ReactionSound::Annoyed};
   }
-  if (mood == BuddyMood::Sleepy && streak == 1) {
-    return {FaceExpression::Curious, ReactionSound::Curious};
-  }
-  // Calm preserves V1; Sleepy's unspecified later levels also retain V1.
+  // Calm preserves V1.
   if (streak == 1) {
     return {FaceExpression::Happy, ReactionSound::Happy};
   }
