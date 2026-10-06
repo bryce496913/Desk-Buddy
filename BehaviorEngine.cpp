@@ -57,7 +57,10 @@ void recordRecentInteraction(RecentInteractionType type, uint32_t now) {
 
 ReactionPlan selectTapReaction(BuddyMood mood, uint8_t streak,
                                RecentInteractionContext previous) {
-  (void)previous;  // Foundation only: recent context does not affect reactions yet.
+  if (previous.recent && previous.type == RecentInteractionType::Sound &&
+      streak == 1 && (mood == BuddyMood::Calm || mood == BuddyMood::Engaged)) {
+    return {FaceExpression::Curious, ReactionSound::Curious};
+  }
   if (mood == BuddyMood::Engaged) {
     return streak < 3
         ? ReactionPlan{FaceExpression::Happy, ReactionSound::Happy}
@@ -79,7 +82,9 @@ ReactionPlan selectTapReaction(BuddyMood mood, uint8_t streak,
 }
 
 ReactionPlan selectHoldReaction(BuddyMood mood, RecentInteractionContext previous) {
-  (void)previous;
+  if (previous.recent && previous.type == RecentInteractionType::Sound) {
+    return {FaceExpression::Happy, ReactionSound::Happy};
+  }
   if (mood == BuddyMood::Grumpy || mood == BuddyMood::Sleepy) {
     return {FaceExpression::Curious, ReactionSound::Curious};
   }
@@ -272,8 +277,8 @@ void handleTapInteraction(uint32_t now) {
     updateMoodState(now);
 
     const ReactionPlan plan = selectTapReaction(reactionMood, touchStreak, previous);
-    startGenericReaction(now, plan.expression, plan.sound);
     recordRecentInteraction(RecentInteractionType::TouchTap, now);
+    startGenericReaction(now, plan.expression, plan.sound);
   }
 }
 
@@ -290,8 +295,8 @@ void handleHoldInteraction(uint32_t now) {
   updateMoodState(now);
 
   const ReactionPlan plan = selectHoldReaction(reactionMood, previous);
-  startGenericReaction(now, plan.expression, plan.sound);
   recordRecentInteraction(RecentInteractionType::TouchHold, now);
+  startGenericReaction(now, plan.expression, plan.sound);
 }
 
 void enterSleep(uint32_t now) {
