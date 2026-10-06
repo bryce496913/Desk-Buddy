@@ -639,6 +639,51 @@ void testInactivityRolloverAndReinitialization() {
   updateBehaviorEngine(290000);
   assert(getBuddyMood() == BuddyMood::Sleepy);
 }
+
+void testV1ReactionMappingsForEveryMood() {
+  const FaceExpression touchExpressions[] = {
+      FaceExpression::Happy, FaceExpression::Curious, FaceExpression::Annoyed,
+      FaceExpression::Annoyed};
+  const ReactionSound touchSounds[] = {
+      ReactionSound::Happy, ReactionSound::Curious, ReactionSound::Annoyed,
+      ReactionSound::Annoyed};
+  const FaceExpression soundExpressions[] = {
+      FaceExpression::Startled, FaceExpression::Suspicious, FaceExpression::Confused,
+      FaceExpression::Confused};
+  const ReactionSound soundSounds[] = {
+      ReactionSound::Startled, ReactionSound::Suspicious, ReactionSound::Confused,
+      ReactionSound::Confused};
+
+  for (BuddyMood mood : moods) {
+    beginAt();
+    for (uint8_t index = 0; index < 4; ++index) {
+      // Force arrival mood for each event without resetting its history.
+      setDiagnosticMood(mood, 110 + index);
+      processBuddyEvent(BuddyEvent::Touch, 110 + index);
+      assert(getBuddyReaction() == BuddyReaction::Generic);
+      assert(expression == touchExpressions[index]);
+      assert(sound == touchSounds[index]);
+      if (index == 0 && mood == BuddyMood::Sleepy) {
+        assert(getBuddyMood() == BuddyMood::Calm);
+      }
+    }
+
+    beginAt();
+    for (uint8_t index = 0; index < 4; ++index) {
+      setDiagnosticMood(mood, 110 + index);
+      processBuddyEvent(BuddyEvent::SoundDetected, 110 + index);
+      assert(getBuddyReaction() == BuddyReaction::Generic);
+      assert(expression == soundExpressions[index]);
+      assert(sound == soundSounds[index]);
+      if (index == 0 && mood == BuddyMood::Sleepy) {
+        assert(getBuddyMood() == BuddyMood::Calm);
+      }
+    }
+  }
+  // Mood is intentionally ignored by selectors in Pass 3A. Their captured
+  // pre-event argument is documented at each call site; later mood-specific
+  // mappings can verify that distinction behaviorally without a debug API.
+}
 }  // namespace
 
 long random(long) { return 0; }
@@ -710,5 +755,6 @@ int main() {
   testAutonomousAndDiagnosticReactionsAreNotActivity();
   testPhysicalSleepResetsWakingInactivity();
   testInactivityRolloverAndReinitialization();
+  testV1ReactionMappingsForEveryMood();
   return 0;
 }
