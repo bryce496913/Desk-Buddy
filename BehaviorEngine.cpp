@@ -25,7 +25,7 @@ struct ReactionPlan {
   ReactionSound sound;
 };
 
-ReactionPlan selectTouchReaction(BuddyMood mood, uint8_t streak) {
+ReactionPlan selectTapReaction(BuddyMood mood, uint8_t streak) {
   if (mood == BuddyMood::Engaged) {
     return streak < 3
         ? ReactionPlan{FaceExpression::Happy, ReactionSound::Happy}
@@ -44,6 +44,13 @@ ReactionPlan selectTouchReaction(BuddyMood mood, uint8_t streak) {
     return {FaceExpression::Curious, ReactionSound::Curious};
   }
   return {FaceExpression::Annoyed, ReactionSound::Annoyed};
+}
+
+ReactionPlan selectHoldReaction(BuddyMood mood) {
+  if (mood == BuddyMood::Grumpy || mood == BuddyMood::Sleepy) {
+    return {FaceExpression::Curious, ReactionSound::Curious};
+  }
+  return {FaceExpression::Happy, ReactionSound::Happy};
 }
 
 ReactionPlan selectSoundReaction(BuddyMood mood, uint8_t streak) {
@@ -181,8 +188,7 @@ void startGenericReaction(uint32_t now, FaceExpression expression,
   startReactionSound(now, sound);
 }
 
-// Transitional policy shared by Tap and Hold until Hold gets its own meaning.
-void handleLegacyTouchInteraction(uint32_t now) {
+void handleTapInteraction(uint32_t now) {
   if (coreState == BuddyCoreState::Awake) {
     // Selection uses arrival context, before this touch changes mood.
     const BuddyMood reactionMood = currentMood;
@@ -208,9 +214,24 @@ void handleLegacyTouchInteraction(uint32_t now) {
     }
     updateMoodState(now);
 
-    const ReactionPlan plan = selectTouchReaction(reactionMood, touchStreak);
+    const ReactionPlan plan = selectTapReaction(reactionMood, touchStreak);
     startGenericReaction(now, plan.expression, plan.sound);
   }
+}
+
+void handleHoldInteraction(uint32_t now) {
+  if (coreState != BuddyCoreState::Awake) return;
+
+  const BuddyMood reactionMood = currentMood;
+  lastMeaningfulActivityAt = now;
+  autonomousReactionActive = false;
+  scheduleNextIdlePersonality(now);
+  increaseScore(engagementScore, 30);
+  decreaseScore(irritationScore, 15);
+  updateMoodState(now);
+
+  const ReactionPlan plan = selectHoldReaction(reactionMood);
+  startGenericReaction(now, plan.expression, plan.sound);
 }
 
 void enterSleep(uint32_t now) {
@@ -299,8 +320,10 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       }
       break;
     case BuddyEvent::TouchTap:
+      handleTapInteraction(now);
+      break;
     case BuddyEvent::TouchHold:
-      handleLegacyTouchInteraction(now);
+      handleHoldInteraction(now);
       break;
     case BuddyEvent::SoundDetected:
       if (coreState == BuddyCoreState::Awake) {
