@@ -160,7 +160,7 @@ int main() {
   assert(lastRequestedVariant == 2);
   assert(selectedVariant == 2);
   processBuddyEvent(BuddyEvent::SoundDetected, 501);
-  assert(lastExpression == FaceExpression::Startled);
+  assert(lastExpression == FaceExpression::Confused);
   setDiagnosticMood(BuddyMood::Grumpy, 100);
   processBuddyEvent(BuddyEvent::SoundDetected, 502);
   assert(lastExpression == FaceExpression::Annoyed);

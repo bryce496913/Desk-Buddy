@@ -480,7 +480,7 @@ void testRecentInteractionRolloverAndHistoryIndependence() {
   expectMood(anchor + uint32_t{5200}, BuddyMood::Calm, 25, 0, 0);
   expectRecent(anchor + uint32_t{5200}, Type::TouchTap, 0, true);
   processBuddyEvent(BuddyEvent::SoundDetected, anchor + uint32_t{5300});
-  expectReaction(FaceExpression::Startled, ReactionSound::Startled);
+  expectReaction(FaceExpression::Confused, ReactionSound::Confused);
   expectRecent(anchor + uint32_t{5300}, Type::Sound, 0, true);
   processBuddyEvent(BuddyEvent::TouchTap, anchor + uint32_t{5400});
   expectMood(anchor + uint32_t{5400}, BuddyMood::Calm, 35, 25, 0);  // Tap #3.

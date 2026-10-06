@@ -88,7 +88,28 @@ ReactionPlan selectHoldReaction(BuddyMood mood, RecentInteractionContext previou
 
 ReactionPlan selectSoundReaction(BuddyMood mood, uint8_t streak,
                                  RecentInteractionContext previous) {
-  (void)previous;
+  if (previous.recent && previous.type == RecentInteractionType::TouchHold) {
+    if (mood == BuddyMood::Engaged) {
+      return streak <= 2
+          ? ReactionPlan{FaceExpression::Curious, ReactionSound::Curious}
+          : ReactionPlan{FaceExpression::Suspicious, ReactionSound::Suspicious};
+    }
+    if (mood == BuddyMood::Grumpy) {
+      if (streak == 1) return {FaceExpression::Curious, ReactionSound::Curious};
+      if (streak == 2) return {FaceExpression::Suspicious, ReactionSound::Suspicious};
+      return {FaceExpression::Annoyed, ReactionSound::Annoyed};
+    }
+    if (mood == BuddyMood::Calm && streak == 1) {
+      return {FaceExpression::Curious, ReactionSound::Curious};
+    }
+    if (mood == BuddyMood::Sleepy && streak == 2) {
+      return {FaceExpression::Suspicious, ReactionSound::Suspicious};
+    }
+  }
+  if (previous.recent && previous.type == RecentInteractionType::TouchTap &&
+      mood == BuddyMood::Calm && streak == 1) {
+    return {FaceExpression::Confused, ReactionSound::Confused};
+  }
   if (mood == BuddyMood::Grumpy) {
     return streak == 1
         ? ReactionPlan{FaceExpression::Suspicious, ReactionSound::Suspicious}
@@ -369,9 +390,9 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       break;
     case BuddyEvent::SoundDetected:
       if (coreState == BuddyCoreState::Awake) {
-        const RecentInteractionContext previous = getRecentInteractionContext(now);
         // Sleepy may become Calm below; retain Sleepy as reaction context.
         const BuddyMood reactionMood = currentMood;
+        const RecentInteractionContext previous = getRecentInteractionContext(now);
         lastMeaningfulActivityAt = now;
         increaseScore(engagementScore, 5);
         updateMoodState(now);
@@ -387,8 +408,8 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
         lastSoundAt = now;
 
         const ReactionPlan plan = selectSoundReaction(reactionMood, soundStreak, previous);
-        startGenericReaction(now, plan.expression, plan.sound);
         recordRecentInteraction(RecentInteractionType::Sound, now);
+        startGenericReaction(now, plan.expression, plan.sound);
       }
       break;
     case BuddyEvent::IdleTimeout:
