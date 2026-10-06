@@ -9,6 +9,8 @@
 static_assert(DESK_BUDDY_DIAGNOSTICS == 1,
               "lifecycle telemetry requires diagnostics mode");
 
+BuddyMood getTestAutonomousSelectionMood();
+
 namespace {
 FaceExpression expression = FaceExpression::Normal;
 ReactionSound sound = ReactionSound::None;
@@ -420,6 +422,47 @@ void testRecentInteractionRecordingAndWindow() {
   expectRecent(10001, Type::None, 0, false);
 }
 
+void testAutonomousSelectionIsolation() {
+  for (BuddyMood mood : {BuddyMood::Calm, BuddyMood::Engaged, BuddyMood::Grumpy}) {
+    beginAt();
+    processBuddyEvent(BuddyEvent::TouchTap, 100);
+    processBuddyEvent(BuddyEvent::SoundDetected, 101);
+    finishAt(102);
+    setDiagnosticMood(mood, 103);
+    const auto before = getDiagnosticMoodState(104);
+    const auto previous = getDiagnosticRecentInteractionContext(104);
+    processBuddyEvent(BuddyEvent::IdleTimeout, 104);
+    assert(getTestAutonomousSelectionMood() == mood);
+    assert(expression == FaceExpression::Curious || expression == FaceExpression::Daydreaming);
+    assert(sound == ReactionSound::None);
+    const auto after = getDiagnosticMoodState(104);
+    const auto context = getDiagnosticRecentInteractionContext(104);
+    assert(before.mood == after.mood && before.engagementScore == after.engagementScore);
+    assert(before.irritationScore == after.irritationScore && before.inactivityMs == after.inactivityMs);
+    assert(previous.type == context.type && previous.ageMs == context.ageMs && previous.recent == context.recent);
+    const FaceExpression first = expression;
+    finishAt(105);
+    processBuddyEvent(BuddyEvent::IdleTimeout, 106);
+    assert(expression != first);  // Exclusion preserves immediate-repeat avoidance.
+    finishAt(107);
+    setDiagnosticMood(BuddyMood::Calm, 108);
+    processBuddyEvent(BuddyEvent::TouchTap, 109);
+    expectReaction(FaceExpression::Curious, ReactionSound::Curious);  // Tap #2.
+    expectMood(109, BuddyMood::Calm, 25, 0, 0);
+    processBuddyEvent(BuddyEvent::SoundDetected, 110);
+    expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious);  // Sound #2.
+  }
+
+  // Direct timeouts apply pending decay before selecting, even without update().
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
+  processBuddyEvent(BuddyEvent::TouchTap, 101);
+  finishAt(102);
+  processBuddyEvent(BuddyEvent::IdleTimeout, 20000);
+  assert(getTestAutonomousSelectionMood() == BuddyMood::Calm);
+  expectMood(20000, BuddyMood::Calm, 35, 0, 19899);
+}
+
 void testRecentInteractionExclusionsAndSleep() {
   using Type = DiagnosticRecentInteractionType;
   beginAt();
@@ -543,6 +586,7 @@ int main() {
   testGrumpyReactionContext();
   testAutomaticMoodContextForIdenticalFirstSounds();
   testRecentInteractionRecordingAndWindow();
+  testAutonomousSelectionIsolation();
   testRecentInteractionExclusionsAndSleep();
   testRecentInteractionRolloverAndHistoryIndependence();
   return 0;

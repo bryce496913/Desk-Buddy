@@ -28,6 +28,7 @@ run_test() {
 }
 
 run_test "production behavior" production_behavior \
+  -DDESK_BUDDY_TEST_AUTONOMOUS_SELECTION=1 \
   "${REPO_ROOT}/tests/production_behavior_test.cpp" \
   "${REPO_ROOT}/BehaviorEngine.cpp"
 
@@ -53,6 +54,7 @@ run_test "BuddyMood state" mood_state \
 
 run_test "BuddyMood lifecycle" mood_lifecycle \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
+  -DDESK_BUDDY_TEST_AUTONOMOUS_SELECTION=1 \
   "${REPO_ROOT}/tests/mood_lifecycle_test.cpp" \
   "${REPO_ROOT}/BehaviorEngine.cpp"
 

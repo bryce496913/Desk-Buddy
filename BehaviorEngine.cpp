@@ -8,15 +8,15 @@ namespace {
 constexpr uint32_t TOUCH_REPEAT_WINDOW_MS = 6000;
 constexpr uint32_t SOUND_REPEAT_WINDOW_MS = 10000;
 constexpr uint32_t CROSS_INTERACTION_WINDOW_MS = 5000;
-constexpr uint32_t IDLE_PERSONALITY_MIN_MS = 20000;
-constexpr uint32_t IDLE_PERSONALITY_MAX_MS = 40001;
+constexpr uint32_t AUTONOMOUS_BEHAVIOR_MIN_MS = 20000;
+constexpr uint32_t AUTONOMOUS_BEHAVIOR_MAX_MS = 40001;
 constexpr uint8_t MAX_MOOD_SCORE = 100;
 constexpr uint8_t ENGAGED_THRESHOLD = 40;
 constexpr uint8_t GRUMPY_THRESHOLD = 60;
 constexpr uint32_t MOOD_DECAY_INTERVAL_MS = 10000;
 constexpr uint32_t SLEEPY_AFTER_INACTIVITY_MS = 90000;
 
-enum class IdlePersonality : uint8_t {
+enum class AutonomousBehavior : uint8_t {
   Curious,
   Daydreaming
 };
@@ -146,11 +146,11 @@ uint32_t lastTouchAt = 0;
 uint8_t touchStreak = 0;
 uint32_t lastSoundAt = 0;
 uint8_t soundStreak = 0;
-uint32_t nextIdlePersonalityAt = 0;
-bool idlePersonalityScheduled = false;
+uint32_t nextAutonomousBehaviorAt = 0;
+bool autonomousBehaviorScheduled = false;
 bool autonomousReactionActive = false;
-IdlePersonality lastIdlePersonality = IdlePersonality::Curious;
-bool hasLastIdlePersonality = false;
+AutonomousBehavior lastAutonomousBehavior = AutonomousBehavior::Curious;
+bool hasLastAutonomousBehavior = false;
 
 void increaseScore(uint8_t &score, uint8_t amount) {
   const uint16_t increased = static_cast<uint16_t>(score) + amount;
@@ -194,41 +194,95 @@ bool timeReached(uint32_t now, uint32_t deadline) {
   return static_cast<int32_t>(now - deadline) >= 0;
 }
 
-void scheduleNextIdlePersonality(uint32_t now) {
+void scheduleNextAutonomousBehavior(uint32_t now) {
 #if DESK_BUDDY_DIAGNOSTICS
   (void)now;
-  nextIdlePersonalityAt = 0;
-  idlePersonalityScheduled = false;
+  nextAutonomousBehaviorAt = 0;
+  autonomousBehaviorScheduled = false;
 #else
-  nextIdlePersonalityAt =
+  nextAutonomousBehaviorAt =
       now + static_cast<uint32_t>(
-                random(IDLE_PERSONALITY_MIN_MS, IDLE_PERSONALITY_MAX_MS));
-  idlePersonalityScheduled = true;
+                random(AUTONOMOUS_BEHAVIOR_MIN_MS, AUTONOMOUS_BEHAVIOR_MAX_MS));
+  autonomousBehaviorScheduled = true;
 #endif
 }
 
-void disableIdlePersonality() {
-  nextIdlePersonalityAt = 0;
-  idlePersonalityScheduled = false;
+void disableAutonomousBehavior() {
+  nextAutonomousBehaviorAt = 0;
+  autonomousBehaviorScheduled = false;
   autonomousReactionActive = false;
 }
 
-IdlePersonality selectIdlePersonality() {
-  IdlePersonality selected = static_cast<IdlePersonality>(random(2));
-  if (hasLastIdlePersonality && selected == lastIdlePersonality) {
-    selected = selected == IdlePersonality::Curious
-        ? IdlePersonality::Daydreaming
-        : IdlePersonality::Curious;
+struct AutonomousBehaviorPlan {
+  FaceExpression expression;
+  ReactionSound sound;
+};
+struct WeightedAutonomousBehavior {
+  AutonomousBehavior behavior;
+  uint8_t weight;
+};
+struct AutonomousBehaviorPool {
+  const WeightedAutonomousBehavior* candidates;
+  uint8_t count;
+};
+constexpr WeightedAutonomousBehavior DEFAULT_AUTONOMOUS_POOL[] = {
+    {AutonomousBehavior::Curious, 1}, {AutonomousBehavior::Daydreaming, 1}};
+
+AutonomousBehaviorPool autonomousPoolFor(BuddyMood mood) {
+  // All moods retain the original two choices until expanded behaviors exist.
+  switch (mood) {
+    case BuddyMood::Calm:
+    case BuddyMood::Engaged:
+    case BuddyMood::Grumpy:
+    case BuddyMood::Sleepy:
+      return {DEFAULT_AUTONOMOUS_POOL, 2};
   }
-  lastIdlePersonality = selected;
-  hasLastIdlePersonality = true;
+  return {DEFAULT_AUTONOMOUS_POOL, 2};
+}
+
+#if defined(DESK_BUDDY_TEST_AUTONOMOUS_SELECTION)
+BuddyMood lastAutonomousSelectionMood = BuddyMood::Calm;
+#endif
+
+AutonomousBehavior selectAutonomousBehavior(BuddyMood mood) {
+#if defined(DESK_BUDDY_TEST_AUTONOMOUS_SELECTION)
+  lastAutonomousSelectionMood = mood;
+#endif
+  const AutonomousBehaviorPool pool = autonomousPoolFor(mood);
+  uint16_t totalWeight = 0;
+  for (uint8_t index = 0; index < pool.count; ++index) {
+    const auto candidate = pool.candidates[index];
+    if (!hasLastAutonomousBehavior || candidate.behavior != lastAutonomousBehavior) {
+      totalWeight += candidate.weight;
+    }
+  }
+  // A future single-choice pool must still be able to select its sole behavior.
+  const bool excludePrevious = totalWeight != 0;
+  if (!excludePrevious) {
+    for (uint8_t index = 0; index < pool.count; ++index) {
+      totalWeight += pool.candidates[index].weight;
+    }
+  }
+  uint16_t ticket = static_cast<uint16_t>(random(totalWeight));
+  AutonomousBehavior selected = pool.candidates[0].behavior;
+  for (uint8_t index = 0; index < pool.count; ++index) {
+    const auto candidate = pool.candidates[index];
+    if (excludePrevious && hasLastAutonomousBehavior &&
+        candidate.behavior == lastAutonomousBehavior) continue;
+    if (ticket < candidate.weight) {
+      selected = candidate.behavior;
+      break;
+    }
+    ticket -= candidate.weight;
+  }
+  lastAutonomousBehavior = selected;
+  hasLastAutonomousBehavior = true;
   return selected;
 }
 
-FaceExpression faceExpressionFor(IdlePersonality personality) {
-  return personality == IdlePersonality::Curious
-      ? FaceExpression::Curious
-      : FaceExpression::Daydreaming;
+AutonomousBehaviorPlan planForAutonomousBehavior(AutonomousBehavior behavior) {
+  return {behavior == AutonomousBehavior::Curious
+      ? FaceExpression::Curious : FaceExpression::Daydreaming, ReactionSound::None};
 }
 
 void resetTouchHistory() {
@@ -256,7 +310,7 @@ void handleTapInteraction(uint32_t now) {
     const BuddyMood reactionMood = currentMood;
     lastMeaningfulActivityAt = now;
     autonomousReactionActive = false;
-    scheduleNextIdlePersonality(now);
+    scheduleNextAutonomousBehavior(now);
     if (touchStreak == 0 ||
         static_cast<uint32_t>(now - lastTouchAt) >
             TOUCH_REPEAT_WINDOW_MS) {
@@ -289,7 +343,7 @@ void handleHoldInteraction(uint32_t now) {
   const BuddyMood reactionMood = currentMood;
   lastMeaningfulActivityAt = now;
   autonomousReactionActive = false;
-  scheduleNextIdlePersonality(now);
+  scheduleNextAutonomousBehavior(now);
   increaseScore(engagementScore, 30);
   decreaseScore(irritationScore, 15);
   updateMoodState(now);
@@ -307,7 +361,7 @@ void enterSleep(uint32_t now) {
   activeReaction = BuddyReaction::Idle;
   resetTouchHistory();
   resetSoundHistory();
-  disableIdlePersonality();
+  disableAutonomousBehavior();
   enterSleepFace(now);
   stopReactionSound();
   playSleepSound();
@@ -321,7 +375,7 @@ void wakeBuddy(uint32_t now) {
   activeReaction = BuddyReaction::Idle;
   resetSoundHistory();
   autonomousReactionActive = false;
-  scheduleNextIdlePersonality(now);
+  scheduleNextAutonomousBehavior(now);
   wakeFace(now);
   playWakeSound();
   ignoreSoundSensorAfterWake();
@@ -342,7 +396,7 @@ void beginBehaviorEngine(uint32_t now) {
   resetSoundHistory();
   scheduleFaceBehavior(now);
   autonomousReactionActive = false;
-  scheduleNextIdlePersonality(now);
+  scheduleNextAutonomousBehavior(now);
 }
 
 void updateBehaviorEngine(uint32_t now) {
@@ -354,27 +408,27 @@ void updateBehaviorEngine(uint32_t now) {
     finishFaceReaction(now);
     if (autonomousReactionActive) {
       autonomousReactionActive = false;
-      scheduleNextIdlePersonality(now);
+      scheduleNextAutonomousBehavior(now);
     }
   }
 
-  if (coreState == BuddyCoreState::Awake && idlePersonalityScheduled &&
-      timeReached(now, nextIdlePersonalityAt)) {
-    if (activeReaction == BuddyReaction::Idle && !isSoundEngineActive()) {
-      idlePersonalityScheduled = false;
-      processBuddyEvent(BuddyEvent::IdleTimeout, now);
-    } else {
-      scheduleNextIdlePersonality(now);
-    }
-  }
-
-  // Evaluate after completion/autonomy so Sleepy requires actual eligibility.
+  // Evaluate while still Idle, before autonomy can occupy the reaction slot.
   // Before inactivity expires, a forced diagnostic mood lasts until scores
   // change, matching the existing diagnostic selection semantics.
   if (coreState == BuddyCoreState::Awake &&
       (scoresDecayed || static_cast<uint32_t>(now - lastMeaningfulActivityAt) >=
                             SLEEPY_AFTER_INACTIVITY_MS)) {
     updateMoodState(now);
+  }
+
+  if (coreState == BuddyCoreState::Awake && autonomousBehaviorScheduled &&
+      timeReached(now, nextAutonomousBehaviorAt)) {
+    if (activeReaction == BuddyReaction::Idle && !isSoundEngineActive()) {
+      autonomousBehaviorScheduled = false;
+      processBuddyEvent(BuddyEvent::IdleTimeout, now);
+    } else {
+      scheduleNextAutonomousBehavior(now);
+    }
   }
 }
 
@@ -402,7 +456,7 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
         increaseScore(engagementScore, 5);
         updateMoodState(now);
         autonomousReactionActive = false;
-        scheduleNextIdlePersonality(now);
+        scheduleNextAutonomousBehavior(now);
         if (soundStreak == 0 ||
             static_cast<uint32_t>(now - lastSoundAt) >
                 SOUND_REPEAT_WINDOW_MS) {
@@ -420,15 +474,22 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
     case BuddyEvent::IdleTimeout:
       if (coreState == BuddyCoreState::Awake &&
           activeReaction == BuddyReaction::Idle && !isSoundEngineActive()) {
-        idlePersonalityScheduled = false;
+        // Explicit IdleTimeout callers also need decay and genuine idle mood.
+        decayMoodScores(now);
+        updateMoodState(now);
+        autonomousBehaviorScheduled = false;
         autonomousReactionActive = true;
-        const IdlePersonality personality = selectIdlePersonality();
-        startGenericReaction(now, faceExpressionFor(personality),
-                             ReactionSound::None);
+        const AutonomousBehavior behavior = selectAutonomousBehavior(currentMood);
+        const AutonomousBehaviorPlan plan = planForAutonomousBehavior(behavior);
+        startGenericReaction(now, plan.expression, plan.sound);
       }
       break;
   }
 }
+
+#if defined(DESK_BUDDY_TEST_AUTONOMOUS_SELECTION)
+BuddyMood getTestAutonomousSelectionMood() { return lastAutonomousSelectionMood; }
+#endif
 
 BuddyCoreState getBuddyCoreState() { return coreState; }
 BuddyReaction getBuddyReaction() { return activeReaction; }
@@ -476,7 +537,7 @@ bool triggerDiagnosticReaction(DiagnosticReaction reaction,
   selectedVariantIndex = DIAGNOSTIC_RANDOM_VARIANT;
 
   autonomousReactionActive = false;
-  disableIdlePersonality();
+  disableAutonomousBehavior();
 
   if (reaction == DiagnosticReaction::Normal) {
     activeReaction = BuddyReaction::Idle;
