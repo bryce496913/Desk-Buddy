@@ -12,6 +12,7 @@ constexpr uint32_t IDLE_PERSONALITY_MAX_MS = 40001;
 constexpr uint8_t MAX_MOOD_SCORE = 100;
 constexpr uint8_t ENGAGED_THRESHOLD = 40;
 constexpr uint8_t GRUMPY_THRESHOLD = 60;
+constexpr uint32_t MOOD_DECAY_INTERVAL_MS = 10000;
 
 enum class IdlePersonality : uint8_t {
   Curious,
@@ -23,6 +24,7 @@ BuddyReaction activeReaction = BuddyReaction::Idle;
 BuddyMood currentMood = BuddyMood::Calm;
 uint8_t engagementScore = 0;
 uint8_t irritationScore = 0;
+uint32_t lastMoodDecayAt = 0;
 uint32_t lastTouchAt = 0;
 uint8_t touchStreak = 0;
 uint32_t lastSoundAt = 0;
@@ -47,6 +49,23 @@ void updateMoodFromScores() {
   } else {
     currentMood = BuddyMood::Calm;
   }
+}
+
+void decreaseScore(uint8_t &score, uint32_t amount) {
+  score = amount >= score ? 0 : static_cast<uint8_t>(score - amount);
+}
+
+void decayMoodScores(uint32_t now) {
+  const uint32_t steps =
+      static_cast<uint32_t>(now - lastMoodDecayAt) / MOOD_DECAY_INTERVAL_MS;
+  if (steps == 0) return;
+
+  // Even a full uint32_t elapsed interval fits these products. Preserve the
+  // fractional interval so delayed updates do not move the decay schedule.
+  decreaseScore(engagementScore, steps * 5);
+  decreaseScore(irritationScore, steps * 10);
+  lastMoodDecayAt += steps * MOOD_DECAY_INTERVAL_MS;
+  updateMoodFromScores();
 }
 
 bool timeReached(uint32_t now, uint32_t deadline) {
@@ -109,6 +128,7 @@ void startGenericReaction(uint32_t now, FaceExpression expression,
 }
 
 void enterSleep(uint32_t now) {
+  lastMoodDecayAt = now;
   coreState = BuddyCoreState::Sleeping;
   activeReaction = BuddyReaction::Idle;
   resetTouchHistory();
@@ -120,6 +140,7 @@ void enterSleep(uint32_t now) {
 }
 
 void wakeBuddy(uint32_t now) {
+  lastMoodDecayAt = now;
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
   resetSoundHistory();
@@ -137,6 +158,7 @@ void beginBehaviorEngine(uint32_t now) {
   currentMood = BuddyMood::Calm;
   engagementScore = 0;
   irritationScore = 0;
+  lastMoodDecayAt = now;
   resetTouchHistory();
   resetSoundHistory();
   scheduleFaceBehavior(now);
@@ -145,6 +167,10 @@ void beginBehaviorEngine(uint32_t now) {
 }
 
 void updateBehaviorEngine(uint32_t now) {
+  if (coreState == BuddyCoreState::Awake) {
+    decayMoodScores(now);
+  }
+
   if (activeReaction == BuddyReaction::Generic && isFaceReactionFinished(now)) {
     activeReaction = BuddyReaction::Idle;
     finishFaceReaction(now);
@@ -252,7 +278,8 @@ BuddyReaction getBuddyReaction() { return activeReaction; }
 BuddyMood getBuddyMood() { return currentMood; }
 
 #if DESK_BUDDY_DIAGNOSTICS
-void setDiagnosticMood(BuddyMood mood) {
+void setDiagnosticMood(BuddyMood mood, uint32_t now) {
+  lastMoodDecayAt = now;
   engagementScore = mood == BuddyMood::Engaged ? ENGAGED_THRESHOLD : 0;
   irritationScore = mood == BuddyMood::Grumpy ? GRUMPY_THRESHOLD : 0;
   // A forced Sleepy state persists until a real mood-affecting event.

@@ -48,7 +48,7 @@ BuddyReaction getBuddyReaction();
 BuddyMood getBuddyMood();
 
 #if DESK_BUDDY_DIAGNOSTICS
-void setDiagnosticMood(BuddyMood mood);
+void setDiagnosticMood(BuddyMood mood, uint32_t now);
 bool triggerDiagnosticReaction(DiagnosticReaction reaction,
                                DiagnosticSoundVariant variant, uint32_t now,
                                uint8_t &selectedVariantIndex);

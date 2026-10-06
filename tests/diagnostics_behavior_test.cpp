@@ -76,7 +76,7 @@ int main() {
   const BuddyMood moods[] = {BuddyMood::Engaged, BuddyMood::Grumpy,
                             BuddyMood::Sleepy, BuddyMood::Calm};
   for (BuddyMood mood : moods) {
-    setDiagnosticMood(mood);
+    setDiagnosticMood(mood, 100);
     assert(getBuddyMood() == mood);
     assert(getBuddyCoreState() == BuddyCoreState::Awake);
     assert(getBuddyReaction() == BuddyReaction::Idle);
@@ -131,11 +131,11 @@ int main() {
                                    selectedVariant));
   assert(lastRequestedVariant == 1);
   assert(selectedVariant == 1);
-  setDiagnosticMood(BuddyMood::Engaged);
+  setDiagnosticMood(BuddyMood::Engaged, 100);
   const int faceStartsBeforeMood = faceReactionStarts;
   const int soundStartsBeforeMood = soundReactionStarts;
   const int soundStopsBeforeMood = soundReactionStops;
-  setDiagnosticMood(BuddyMood::Grumpy);
+  setDiagnosticMood(BuddyMood::Grumpy, 100);
   assert(getBuddyReaction() == BuddyReaction::Generic);
   assert(lastExpression == FaceExpression::Annoyed);
   assert(lastSound == ReactionSound::Annoyed);
@@ -143,13 +143,13 @@ int main() {
   assert(faceReactionStarts == faceStartsBeforeMood);
   assert(soundReactionStarts == soundStartsBeforeMood);
   assert(soundReactionStops == soundStopsBeforeMood);
-  setDiagnosticMood(BuddyMood::Engaged);
+  setDiagnosticMood(BuddyMood::Engaged, 100);
   processBuddyEvent(BuddyEvent::Touch, 401);
   assert(lastExpression == FaceExpression::Happy);
-  setDiagnosticMood(BuddyMood::Sleepy);
+  setDiagnosticMood(BuddyMood::Sleepy, 100);
   processBuddyEvent(BuddyEvent::Touch, 402);
   assert(lastExpression == FaceExpression::Curious);
-  setDiagnosticMood(BuddyMood::Calm);
+  setDiagnosticMood(BuddyMood::Calm, 100);
   processBuddyEvent(BuddyEvent::Touch, 403);
   assert(lastExpression == FaceExpression::Annoyed);
 
@@ -161,10 +161,10 @@ int main() {
   assert(selectedVariant == 2);
   processBuddyEvent(BuddyEvent::SoundDetected, 501);
   assert(lastExpression == FaceExpression::Startled);
-  setDiagnosticMood(BuddyMood::Grumpy);
+  setDiagnosticMood(BuddyMood::Grumpy, 100);
   processBuddyEvent(BuddyEvent::SoundDetected, 502);
   assert(lastExpression == FaceExpression::Suspicious);
-  setDiagnosticMood(BuddyMood::Engaged);
+  setDiagnosticMood(BuddyMood::Engaged, 100);
   processBuddyEvent(BuddyEvent::SoundDetected, 503);
   assert(lastExpression == FaceExpression::Confused);
 
@@ -173,8 +173,8 @@ int main() {
   assert(triggerDiagnosticReaction(DiagnosticReaction::Normal,
                                    DiagnosticSoundVariant::Variant1, 600,
                                    selectedVariant));
-  setDiagnosticMood(BuddyMood::Grumpy);
-  updateBehaviorEngine(1000000);
+  setDiagnosticMood(BuddyMood::Grumpy, 100);
+  updateBehaviorEngine(650);
   assert(faceReactionStarts == startsBeforeIdleUpdate);
 
   processBuddyEvent(BuddyEvent::ButtonPressed, 700);
@@ -188,11 +188,11 @@ int main() {
   const int facesBeforeSleepingMood = faceReactionStarts;
   const int soundsBeforeSleepingMood = soundReactionStarts;
   const int stopsBeforeSleepingMood = soundReactionStops;
-  setDiagnosticMood(BuddyMood::Sleepy);
+  setDiagnosticMood(BuddyMood::Sleepy, 100);
   assert(getBuddyMood() == BuddyMood::Sleepy);
   assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
   assert(getBuddyReaction() == BuddyReaction::Idle);
-  setDiagnosticMood(BuddyMood::Grumpy);
+  setDiagnosticMood(BuddyMood::Grumpy, 100);
   assert(faceReactionStarts == facesBeforeSleepingMood);
   assert(soundReactionStarts == soundsBeforeSleepingMood);
   assert(soundReactionStops == stopsBeforeSleepingMood);
