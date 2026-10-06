@@ -378,6 +378,116 @@ void testAutomaticMoodContextForIdenticalFirstSounds() {
   expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious);
   expectMood(16104, BuddyMood::Grumpy, 100, 65, 0);
 }
+
+void expectRecent(uint32_t now, DiagnosticRecentInteractionType type,
+                  uint32_t age, bool recent) {
+  const DiagnosticRecentInteractionContext context =
+      getDiagnosticRecentInteractionContext(now);
+  assert(context.type == type);
+  assert(context.ageMs == age);
+  assert(context.recent == recent);
+}
+
+void testRecentInteractionRecordingAndWindow() {
+  using Type = DiagnosticRecentInteractionType;
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchTap, 0);  // Timestamp zero is valid history.
+  expectRecent(0, Type::TouchTap, 0, true);
+  beginAt(100);
+  expectRecent(100, Type::None, 0, false);
+  processBuddyEvent(BuddyEvent::TouchTap, 1000);
+  expectRecent(1000, Type::TouchTap, 0, true);
+  expectRecent(6000, Type::TouchTap, 5000, true);
+  expectRecent(6001, Type::TouchTap, 5001, false);
+  // Snapshot queries neither erase expired state nor mutate its timestamp.
+  expectRecent(1000, Type::TouchTap, 0, true);
+  processBuddyEvent(BuddyEvent::TouchTap, 1100);
+  expectRecent(1100, Type::TouchTap, 0, true);
+  expectRecent(1200, Type::TouchTap, 100, true);
+  processBuddyEvent(BuddyEvent::TouchHold, 1200);
+  expectRecent(1200, Type::TouchHold, 0, true);
+  processBuddyEvent(BuddyEvent::SoundDetected, 1300);
+  expectRecent(1300, Type::Sound, 0, true);
+  processBuddyEvent(BuddyEvent::SoundDetected, 1400);
+  expectRecent(1500, Type::Sound, 100, true);
+  // All events above replace an unfinished transient reaction and still record.
+  assert(faceStarts == 5 && soundStarts == 5);
+  finishAt(1500);
+  expectRecent(1500, Type::Sound, 100, true);
+  updateBehaviorEngine(10000);  // Decay and expiry do not erase the record.
+  expectRecent(10000, Type::Sound, 8600, false);
+  beginAt(10001);
+  expectRecent(10001, Type::None, 0, false);
+}
+
+void testRecentInteractionExclusionsAndSleep() {
+  using Type = DiagnosticRecentInteractionType;
+  beginAt();
+  setDiagnosticMood(BuddyMood::Engaged, 100);
+  uint8_t selected = DIAGNOSTIC_RANDOM_VARIANT;
+  assert(triggerDiagnosticReaction(DiagnosticReaction::Happy,
+      DiagnosticSoundVariant::Random, 200, selected));
+  expectRecent(200, Type::None, 0, false);
+  finishAt(201);
+  processBuddyEvent(BuddyEvent::IdleTimeout, 202);
+  expectRecent(202, Type::None, 0, false);
+
+  processBuddyEvent(BuddyEvent::TouchTap, 1000);
+  finishAt(1001);
+  processBuddyEvent(BuddyEvent::IdleTimeout, 1100);
+  expectRecent(1100, Type::TouchTap, 100, true);
+  assert(expression == FaceExpression::Curious || expression == FaceExpression::Daydreaming);
+  finishAt(1101);
+  processBuddyEvent(BuddyEvent::IdleTimeout, 1200);
+  expectRecent(1200, Type::TouchTap, 200, true);
+  assert(expression == FaceExpression::Curious || expression == FaceExpression::Daydreaming);
+  // Consecutive autonomous reactions exercise both existing personalities.
+  finishAt(1201);
+  setDiagnosticMood(BuddyMood::Grumpy, 1300);
+  expectRecent(1300, Type::TouchTap, 300, true);
+  assert(triggerDiagnosticReaction(DiagnosticReaction::Startled,
+      DiagnosticSoundVariant::Variant1, 1400, selected));
+  expectRecent(1400, Type::TouchTap, 400, true);
+  assert(triggerDiagnosticReaction(DiagnosticReaction::Normal,
+      DiagnosticSoundVariant::Random, 1500, selected));
+  expectRecent(1500, Type::TouchTap, 500, true);
+
+  processBuddyEvent(BuddyEvent::ButtonPressed, 1600);
+  expectRecent(1600, Type::None, 0, false);
+  for (BuddyEvent event : {BuddyEvent::TouchTap, BuddyEvent::TouchHold,
+                          BuddyEvent::SoundDetected, BuddyEvent::IdleTimeout}) {
+    processBuddyEvent(event, 1601);
+    expectRecent(1601, Type::None, 0, false);
+  }
+  processBuddyEvent(BuddyEvent::ButtonPressed, 1602);  // Even very short sleep clears.
+  expectRecent(1602, Type::None, 0, false);
+  processBuddyEvent(BuddyEvent::SoundDetected, 1603);
+  expectRecent(1603, Type::Sound, 0, true);
+}
+
+void testRecentInteractionRolloverAndHistoryIndependence() {
+  using Type = DiagnosticRecentInteractionType;
+  constexpr uint32_t anchor = std::numeric_limits<uint32_t>::max() - 1000;
+  beginAt(anchor);
+  processBuddyEvent(BuddyEvent::TouchTap, anchor);
+  expectRecent(anchor + uint32_t{5000}, Type::TouchTap, 5000, true);
+  expectRecent(anchor + uint32_t{5001}, Type::TouchTap, 5001, false);
+  processBuddyEvent(BuddyEvent::TouchHold, anchor + uint32_t{5100});
+  expectRecent(anchor + uint32_t{5100}, Type::TouchHold, 0, true);
+  setDiagnosticMood(BuddyMood::Calm, anchor + uint32_t{5101});
+  processBuddyEvent(BuddyEvent::TouchTap, anchor + uint32_t{5200});
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);  // Tap #2.
+  expectMood(anchor + uint32_t{5200}, BuddyMood::Calm, 25, 0, 0);
+  expectRecent(anchor + uint32_t{5200}, Type::TouchTap, 0, true);
+  processBuddyEvent(BuddyEvent::SoundDetected, anchor + uint32_t{5300});
+  expectReaction(FaceExpression::Startled, ReactionSound::Startled);
+  expectRecent(anchor + uint32_t{5300}, Type::Sound, 0, true);
+  processBuddyEvent(BuddyEvent::TouchTap, anchor + uint32_t{5400});
+  expectMood(anchor + uint32_t{5400}, BuddyMood::Calm, 35, 25, 0);  // Tap #3.
+  processBuddyEvent(BuddyEvent::SoundDetected, anchor + uint32_t{5500});
+  expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious);  // Sound #2.
+  expectRecent(anchor + uint32_t{5500}, Type::Sound, 0, true);
+}
 }  // namespace
 
 long random(long) { return 0; }
@@ -432,5 +542,8 @@ int main() {
   testScoreBoundsAndReadOnlyTelemetry();
   testGrumpyReactionContext();
   testAutomaticMoodContextForIdenticalFirstSounds();
+  testRecentInteractionRecordingAndWindow();
+  testRecentInteractionExclusionsAndSleep();
+  testRecentInteractionRolloverAndHistoryIndependence();
   return 0;
 }

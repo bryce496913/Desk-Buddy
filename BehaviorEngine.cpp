@@ -7,6 +7,7 @@
 namespace {
 constexpr uint32_t TOUCH_REPEAT_WINDOW_MS = 6000;
 constexpr uint32_t SOUND_REPEAT_WINDOW_MS = 10000;
+constexpr uint32_t CROSS_INTERACTION_WINDOW_MS = 5000;
 constexpr uint32_t IDLE_PERSONALITY_MIN_MS = 20000;
 constexpr uint32_t IDLE_PERSONALITY_MAX_MS = 40001;
 constexpr uint8_t MAX_MOOD_SCORE = 100;
@@ -25,7 +26,38 @@ struct ReactionPlan {
   ReactionSound sound;
 };
 
-ReactionPlan selectTapReaction(BuddyMood mood, uint8_t streak) {
+enum class RecentInteractionType : uint8_t { None, TouchTap, TouchHold, Sound };
+struct RecentInteractionContext {
+  RecentInteractionType type;
+  uint32_t ageMs;
+  bool recent;
+};
+
+RecentInteractionType lastInteractionType = RecentInteractionType::None;
+uint32_t lastInteractionAt = 0;
+bool hasLastInteraction = false;
+
+RecentInteractionContext getRecentInteractionContext(uint32_t now) {
+  if (!hasLastInteraction) return {RecentInteractionType::None, 0, false};
+  const uint32_t age = static_cast<uint32_t>(now - lastInteractionAt);
+  return {lastInteractionType, age, age <= CROSS_INTERACTION_WINDOW_MS};
+}
+
+void clearRecentInteraction() {
+  lastInteractionType = RecentInteractionType::None;
+  lastInteractionAt = 0;
+  hasLastInteraction = false;
+}
+
+void recordRecentInteraction(RecentInteractionType type, uint32_t now) {
+  lastInteractionType = type;
+  lastInteractionAt = now;
+  hasLastInteraction = true;
+}
+
+ReactionPlan selectTapReaction(BuddyMood mood, uint8_t streak,
+                               RecentInteractionContext previous) {
+  (void)previous;  // Foundation only: recent context does not affect reactions yet.
   if (mood == BuddyMood::Engaged) {
     return streak < 3
         ? ReactionPlan{FaceExpression::Happy, ReactionSound::Happy}
@@ -46,14 +78,17 @@ ReactionPlan selectTapReaction(BuddyMood mood, uint8_t streak) {
   return {FaceExpression::Annoyed, ReactionSound::Annoyed};
 }
 
-ReactionPlan selectHoldReaction(BuddyMood mood) {
+ReactionPlan selectHoldReaction(BuddyMood mood, RecentInteractionContext previous) {
+  (void)previous;
   if (mood == BuddyMood::Grumpy || mood == BuddyMood::Sleepy) {
     return {FaceExpression::Curious, ReactionSound::Curious};
   }
   return {FaceExpression::Happy, ReactionSound::Happy};
 }
 
-ReactionPlan selectSoundReaction(BuddyMood mood, uint8_t streak) {
+ReactionPlan selectSoundReaction(BuddyMood mood, uint8_t streak,
+                                 RecentInteractionContext previous) {
+  (void)previous;
   if (mood == BuddyMood::Grumpy) {
     return streak == 1
         ? ReactionPlan{FaceExpression::Suspicious, ReactionSound::Suspicious}
@@ -190,6 +225,7 @@ void startGenericReaction(uint32_t now, FaceExpression expression,
 
 void handleTapInteraction(uint32_t now) {
   if (coreState == BuddyCoreState::Awake) {
+    const RecentInteractionContext previous = getRecentInteractionContext(now);
     // Selection uses arrival context, before this touch changes mood.
     const BuddyMood reactionMood = currentMood;
     lastMeaningfulActivityAt = now;
@@ -214,14 +250,16 @@ void handleTapInteraction(uint32_t now) {
     }
     updateMoodState(now);
 
-    const ReactionPlan plan = selectTapReaction(reactionMood, touchStreak);
+    const ReactionPlan plan = selectTapReaction(reactionMood, touchStreak, previous);
     startGenericReaction(now, plan.expression, plan.sound);
+    recordRecentInteraction(RecentInteractionType::TouchTap, now);
   }
 }
 
 void handleHoldInteraction(uint32_t now) {
   if (coreState != BuddyCoreState::Awake) return;
 
+  const RecentInteractionContext previous = getRecentInteractionContext(now);
   const BuddyMood reactionMood = currentMood;
   lastMeaningfulActivityAt = now;
   autonomousReactionActive = false;
@@ -230,11 +268,13 @@ void handleHoldInteraction(uint32_t now) {
   decreaseScore(irritationScore, 15);
   updateMoodState(now);
 
-  const ReactionPlan plan = selectHoldReaction(reactionMood);
+  const ReactionPlan plan = selectHoldReaction(reactionMood, previous);
   startGenericReaction(now, plan.expression, plan.sound);
+  recordRecentInteraction(RecentInteractionType::TouchHold, now);
 }
 
 void enterSleep(uint32_t now) {
+  clearRecentInteraction();
   lastMoodDecayAt = now;
   lastMeaningfulActivityAt = now;
   coreState = BuddyCoreState::Sleeping;
@@ -248,6 +288,7 @@ void enterSleep(uint32_t now) {
 }
 
 void wakeBuddy(uint32_t now) {
+  clearRecentInteraction();
   lastMoodDecayAt = now;
   lastMeaningfulActivityAt = now;
   coreState = BuddyCoreState::Awake;
@@ -263,6 +304,7 @@ void wakeBuddy(uint32_t now) {
 }  // namespace
 
 void beginBehaviorEngine(uint32_t now) {
+  clearRecentInteraction();
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
   currentMood = BuddyMood::Calm;
@@ -327,6 +369,7 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       break;
     case BuddyEvent::SoundDetected:
       if (coreState == BuddyCoreState::Awake) {
+        const RecentInteractionContext previous = getRecentInteractionContext(now);
         // Sleepy may become Calm below; retain Sleepy as reaction context.
         const BuddyMood reactionMood = currentMood;
         lastMeaningfulActivityAt = now;
@@ -343,8 +386,9 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
         }
         lastSoundAt = now;
 
-        const ReactionPlan plan = selectSoundReaction(reactionMood, soundStreak);
+        const ReactionPlan plan = selectSoundReaction(reactionMood, soundStreak, previous);
         startGenericReaction(now, plan.expression, plan.sound);
+        recordRecentInteraction(RecentInteractionType::Sound, now);
       }
       break;
     case BuddyEvent::IdleTimeout:
@@ -365,6 +409,24 @@ BuddyReaction getBuddyReaction() { return activeReaction; }
 BuddyMood getBuddyMood() { return currentMood; }
 
 #if DESK_BUDDY_DIAGNOSTICS
+DiagnosticRecentInteractionContext getDiagnosticRecentInteractionContext(uint32_t now) {
+  const RecentInteractionContext context = getRecentInteractionContext(now);
+  DiagnosticRecentInteractionType type = DiagnosticRecentInteractionType::None;
+  switch (context.type) {
+    case RecentInteractionType::None: break;
+    case RecentInteractionType::TouchTap:
+      type = DiagnosticRecentInteractionType::TouchTap;
+      break;
+    case RecentInteractionType::TouchHold:
+      type = DiagnosticRecentInteractionType::TouchHold;
+      break;
+    case RecentInteractionType::Sound:
+      type = DiagnosticRecentInteractionType::Sound;
+      break;
+  }
+  return {type, context.ageMs, context.recent};
+}
+
 DiagnosticMoodState getDiagnosticMoodState(uint32_t now) {
   return {currentMood, engagementScore, irritationScore,
           coreState == BuddyCoreState::Awake
