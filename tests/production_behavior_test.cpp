@@ -260,6 +260,28 @@ void testAutonomyDoesNotChangeDecayPolicy() {
   }
 }
 
+void testScheduledAutonomyDoesNotPreventSleepy() {
+  beginAt(0);
+  // Real production scheduling runs during inactivity. Neither the reactions
+  // nor their completions may postpone the 90-second meaningful-activity clock.
+  const uint32_t deadlines[] = {20000, 40100, 60200, 80300};
+  for (uint32_t deadline : deadlines) {
+    updateBehaviorEngine(deadline);
+    assert(getBuddyReaction() == BuddyReaction::Generic);
+    assert(requestedExpression == FaceExpression::Curious ||
+           requestedExpression == FaceExpression::Daydreaming);
+    assert(requestedSound == ReactionSound::None);
+    finishReactionAt(deadline + 100);
+  }
+  updateBehaviorEngine(89999);
+  assert(getBuddyMood() == BuddyMood::Calm);
+  updateBehaviorEngine(90000);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+  processBuddyEvent(BuddyEvent::SoundDetected, 90001);
+  expectReaction(FaceExpression::Startled, ReactionSound::Startled);
+  assert(getBuddyMood() == BuddyMood::Calm);
+}
+
 void testSleepSuppressesAutonomy() {
   beginAt(0);
   processBuddyEvent(BuddyEvent::ButtonPressed, 100);
@@ -351,6 +373,7 @@ int main() {
   testAutonomousPersonalityAndHistories();
   testInteractionPostponesAutonomy();
   testAutonomyDoesNotChangeDecayPolicy();
+  testScheduledAutonomyDoesNotPreventSleepy();
   testSleepSuppressesAutonomy();
   testRolloverSafeTiming();
   return 0;

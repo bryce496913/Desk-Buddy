@@ -13,6 +13,7 @@ constexpr uint8_t MAX_MOOD_SCORE = 100;
 constexpr uint8_t ENGAGED_THRESHOLD = 40;
 constexpr uint8_t GRUMPY_THRESHOLD = 60;
 constexpr uint32_t MOOD_DECAY_INTERVAL_MS = 10000;
+constexpr uint32_t SLEEPY_AFTER_INACTIVITY_MS = 90000;
 
 enum class IdlePersonality : uint8_t {
   Curious,
@@ -25,6 +26,7 @@ BuddyMood currentMood = BuddyMood::Calm;
 uint8_t engagementScore = 0;
 uint8_t irritationScore = 0;
 uint32_t lastMoodDecayAt = 0;
+uint32_t lastMeaningfulActivityAt = 0;
 uint32_t lastTouchAt = 0;
 uint8_t touchStreak = 0;
 uint32_t lastSoundAt = 0;
@@ -41,11 +43,16 @@ void increaseScore(uint8_t &score, uint8_t amount) {
                                     : static_cast<uint8_t>(increased);
 }
 
-void updateMoodFromScores() {
+void updateMoodState(uint32_t now) {
   if (irritationScore >= GRUMPY_THRESHOLD) {
     currentMood = BuddyMood::Grumpy;
   } else if (engagementScore >= ENGAGED_THRESHOLD) {
     currentMood = BuddyMood::Engaged;
+  } else if (coreState == BuddyCoreState::Awake &&
+             activeReaction == BuddyReaction::Idle && !isSoundEngineActive() &&
+             static_cast<uint32_t>(now - lastMeaningfulActivityAt) >=
+                 SLEEPY_AFTER_INACTIVITY_MS) {
+    currentMood = BuddyMood::Sleepy;
   } else {
     currentMood = BuddyMood::Calm;
   }
@@ -55,17 +62,17 @@ void decreaseScore(uint8_t &score, uint32_t amount) {
   score = amount >= score ? 0 : static_cast<uint8_t>(score - amount);
 }
 
-void decayMoodScores(uint32_t now) {
+bool decayMoodScores(uint32_t now) {
   const uint32_t steps =
       static_cast<uint32_t>(now - lastMoodDecayAt) / MOOD_DECAY_INTERVAL_MS;
-  if (steps == 0) return;
+  if (steps == 0) return false;
 
   // Even a full uint32_t elapsed interval fits these products. Preserve the
   // fractional interval so delayed updates do not move the decay schedule.
   decreaseScore(engagementScore, steps * 5);
   decreaseScore(irritationScore, steps * 10);
   lastMoodDecayAt += steps * MOOD_DECAY_INTERVAL_MS;
-  updateMoodFromScores();
+  return true;
 }
 
 bool timeReached(uint32_t now, uint32_t deadline) {
@@ -129,6 +136,7 @@ void startGenericReaction(uint32_t now, FaceExpression expression,
 
 void enterSleep(uint32_t now) {
   lastMoodDecayAt = now;
+  lastMeaningfulActivityAt = now;
   coreState = BuddyCoreState::Sleeping;
   activeReaction = BuddyReaction::Idle;
   resetTouchHistory();
@@ -141,6 +149,7 @@ void enterSleep(uint32_t now) {
 
 void wakeBuddy(uint32_t now) {
   lastMoodDecayAt = now;
+  lastMeaningfulActivityAt = now;
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
   resetSoundHistory();
@@ -149,6 +158,7 @@ void wakeBuddy(uint32_t now) {
   wakeFace(now);
   playWakeSound();
   ignoreSoundSensorAfterWake();
+  updateMoodState(now);
 }
 }  // namespace
 
@@ -159,6 +169,7 @@ void beginBehaviorEngine(uint32_t now) {
   engagementScore = 0;
   irritationScore = 0;
   lastMoodDecayAt = now;
+  lastMeaningfulActivityAt = now;
   resetTouchHistory();
   resetSoundHistory();
   scheduleFaceBehavior(now);
@@ -167,9 +178,8 @@ void beginBehaviorEngine(uint32_t now) {
 }
 
 void updateBehaviorEngine(uint32_t now) {
-  if (coreState == BuddyCoreState::Awake) {
-    decayMoodScores(now);
-  }
+  const bool scoresDecayed =
+      coreState == BuddyCoreState::Awake && decayMoodScores(now);
 
   if (activeReaction == BuddyReaction::Generic && isFaceReactionFinished(now)) {
     activeReaction = BuddyReaction::Idle;
@@ -189,6 +199,15 @@ void updateBehaviorEngine(uint32_t now) {
       scheduleNextIdlePersonality(now);
     }
   }
+
+  // Evaluate after completion/autonomy so Sleepy requires actual eligibility.
+  // Before inactivity expires, a forced diagnostic mood lasts until scores
+  // change, matching the existing diagnostic selection semantics.
+  if (coreState == BuddyCoreState::Awake &&
+      (scoresDecayed || static_cast<uint32_t>(now - lastMeaningfulActivityAt) >=
+                            SLEEPY_AFTER_INACTIVITY_MS)) {
+    updateMoodState(now);
+  }
 }
 
 void processBuddyEvent(BuddyEvent event, uint32_t now) {
@@ -202,6 +221,7 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       break;
     case BuddyEvent::Touch:
       if (coreState == BuddyCoreState::Awake) {
+        lastMeaningfulActivityAt = now;
         autonomousReactionActive = false;
         scheduleNextIdlePersonality(now);
         if (touchStreak == 0 ||
@@ -221,7 +241,7 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
           increaseScore(engagementScore, 5);
           increaseScore(irritationScore, 25);
         }
-        updateMoodFromScores();
+        updateMoodState(now);
 
         if (touchStreak == 1) {
           startGenericReaction(now, FaceExpression::Happy,
@@ -237,6 +257,9 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       break;
     case BuddyEvent::SoundDetected:
       if (coreState == BuddyCoreState::Awake) {
+        lastMeaningfulActivityAt = now;
+        increaseScore(engagementScore, 5);
+        updateMoodState(now);
         autonomousReactionActive = false;
         scheduleNextIdlePersonality(now);
         if (soundStreak == 0 ||
