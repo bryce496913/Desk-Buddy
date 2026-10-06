@@ -98,7 +98,7 @@ void testTouchLadderPreservesMood() {
   }
 }
 
-void testSoundLadderPreservesMood() {
+void testSoundLadderAlertsSleepy() {
   beginAt();
   setDiagnosticMood(BuddyMood::Sleepy, 100);
   const FaceExpression expressions[] = {FaceExpression::Startled,
@@ -109,7 +109,7 @@ void testSoundLadderPreservesMood() {
                                   ReactionSound::Confused};
   for (uint8_t index = 0; index < 3; ++index) {
     processBuddyEvent(BuddyEvent::SoundDetected, 110 + index);
-    expectReaction(expressions[index], sounds[index], BuddyMood::Sleepy);
+    expectReaction(expressions[index], sounds[index], BuddyMood::Calm);
   }
 }
 
@@ -138,7 +138,8 @@ void testSleepWakePreservesEveryMood() {
     expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, mood);
     assert(faceStarts == 0);
     processBuddyEvent(BuddyEvent::ButtonPressed, 150);
-    expectState(BuddyCoreState::Awake, BuddyReaction::Idle, mood);
+    const BuddyMood wakeMood = mood == BuddyMood::Sleepy ? BuddyMood::Calm : mood;
+    expectState(BuddyCoreState::Awake, BuddyReaction::Idle, wakeMood);
   }
 }
 
@@ -169,7 +170,7 @@ void testMoodChangesPreserveHistories() {
   setDiagnosticMood(BuddyMood::Sleepy, 100);
   processBuddyEvent(BuddyEvent::SoundDetected, 16120);  // Sound window boundary.
   expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious,
-                 BuddyMood::Sleepy);
+                 BuddyMood::Calm);
 }
 
 void testReinitializationResetsMood() {
@@ -319,7 +320,7 @@ void testDiagnosticCanonicalScores() {
   updateBehaviorEngine(18124);
   assert(getBuddyMood() == BuddyMood::Sleepy);
   processBuddyEvent(BuddyEvent::SoundDetected, 18125);
-  assert(getBuddyMood() == BuddyMood::Sleepy);
+  assert(getBuddyMood() == BuddyMood::Calm);
   processBuddyEvent(BuddyEvent::Touch, 24124);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
   processBuddyEvent(BuddyEvent::Touch, 24125);
@@ -383,7 +384,7 @@ void testLongGapSaturatesAtZero() {
   constexpr uint32_t max = std::numeric_limits<uint32_t>::max();
   beginAt(0);
   updateBehaviorEngine(max);
-  assert(getBuddyMood() == BuddyMood::Calm);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
   processBuddyEvent(BuddyEvent::Touch, max);
   assert(getBuddyMood() == BuddyMood::Calm);  // Zero + 20, no underflow.
 
@@ -440,9 +441,11 @@ void testEventsDoNotRestartDecayClock() {
 
   beginAt(0);
   buildTouchMood(1, 2);
-  processBuddyEvent(BuddyEvent::SoundDetected, 9000);
+  processBuddyEvent(BuddyEvent::SoundDetected, 9000);  // engagement 50.
   updateBehaviorEngine(20000);
-  assert(getBuddyMood() == BuddyMood::Calm);
+  assert(getBuddyMood() == BuddyMood::Engaged);  // 40.
+  updateBehaviorEngine(30000);
+  assert(getBuddyMood() == BuddyMood::Calm);  // 35; sound did not reset decay.
 
   beginAt(0);
   buildTouchMood(1, 2);
@@ -462,13 +465,179 @@ void testDiagnosticSelectionRestartsDecayClock() {
   updateBehaviorEngine(1009999);
   assert(getBuddyMood() == BuddyMood::Grumpy);
   updateBehaviorEngine(1010000);  // Canonical 0/60 decays to 0/50.
-  assert(getBuddyMood() == BuddyMood::Calm);
+  assert(getBuddyMood() == BuddyMood::Sleepy);  // Diagnostics are not activity.
 
   setDiagnosticMood(BuddyMood::Sleepy, 1020000);
   updateBehaviorEngine(1029999);
   assert(getBuddyMood() == BuddyMood::Sleepy);
   updateBehaviorEngine(1030000);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+}
+
+void finishAt(uint32_t now) {
+  faceFinished = true;
+  soundActive = false;
+  updateBehaviorEngine(now);
+}
+
+void testInactivityBoundaryAndEligibility() {
+  beginAt(0);
+  updateBehaviorEngine(89999);
+  expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Calm);
+  updateBehaviorEngine(90000);
+  expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Sleepy);
+
+  beginAt(0);
+  processBuddyEvent(BuddyEvent::IdleTimeout, 89990);
+  updateBehaviorEngine(90000);
+  expectState(BuddyCoreState::Awake, BuddyReaction::Generic, BuddyMood::Calm);
+  // Completion is not activity: eligibility can change between decay ticks.
+  finishAt(90001);
+  expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Sleepy);
+
+  beginAt(0);
+  soundActive = true;
+  updateBehaviorEngine(90000);
   assert(getBuddyMood() == BuddyMood::Calm);
+  soundActive = false;
+  updateBehaviorEngine(90001);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+}
+
+void testSleepyAlertingAndSoundDelta() {
+  beginAt(0);
+  updateBehaviorEngine(90000);
+  processBuddyEvent(BuddyEvent::Touch, 90001);
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Calm);
+  processBuddyEvent(BuddyEvent::Touch, 90002);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious,
+                 BuddyMood::Engaged);
+
+  beginAt(0);
+  updateBehaviorEngine(90000);
+  processBuddyEvent(BuddyEvent::SoundDetected, 90001);
+  expectReaction(FaceExpression::Startled, ReactionSound::Startled,
+                 BuddyMood::Calm);
+  // Each accepted sound adds exactly five; seven leave 35, eight reach 40.
+  for (uint32_t index = 2; index <= 8; ++index) {
+    processBuddyEvent(BuddyEvent::SoundDetected, 90000 + index);
+    expectReaction(index == 2 ? FaceExpression::Suspicious : FaceExpression::Confused,
+                   index == 2 ? ReactionSound::Suspicious : ReactionSound::Confused,
+                   index < 8 ? BuddyMood::Calm : BuddyMood::Engaged);
+  }
+}
+
+void testSoundSaturationWithoutIrritation() {
+  beginAt(0);
+  for (uint32_t now = 1; now <= 1000; ++now) {
+    processBuddyEvent(BuddyEvent::SoundDetected, now);
+    assert(getBuddyMood() == (now < 8 ? BuddyMood::Calm : BuddyMood::Engaged));
+  }
+  finishAt(1001);
+  // Saturation at 100 leaves exactly 40 after twelve decay ticks, proving
+  // sounds neither overflow engagement nor accumulate Grumpy irritation.
+  updateBehaviorEngine(120000);
+  assert(getBuddyMood() == BuddyMood::Engaged);
+  updateBehaviorEngine(130000);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+}
+
+void testRealActivityRestartsInactivity() {
+  const BuddyEvent events[] = {BuddyEvent::Touch, BuddyEvent::SoundDetected};
+  for (BuddyEvent event : events) {
+    beginAt(0);
+    updateBehaviorEngine(89998);
+    processBuddyEvent(event, 89999);
+    finishAt(90000);
+    assert(getBuddyMood() == BuddyMood::Calm);
+    updateBehaviorEngine(179998);
+    assert(getBuddyMood() == BuddyMood::Calm);
+    updateBehaviorEngine(179999);
+    assert(getBuddyMood() == BuddyMood::Sleepy);
+  }
+}
+
+void testStrongMoodPrecedenceAndDiagnosticInactivity() {
+  beginAt(0);
+  // Diagnostic selection refreshes decay only, not meaningful activity. This
+  // leaves strong irritation at the inactivity deadline without nine decay ticks.
+  setDiagnosticMood(BuddyMood::Grumpy, 89999);
+  updateBehaviorEngine(90000);
+  assert(getBuddyMood() == BuddyMood::Grumpy);
+  updateBehaviorEngine(99999);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+
+  beginAt(0);
+  setDiagnosticMood(BuddyMood::Engaged, 89999);
+  updateBehaviorEngine(90000);
+  assert(getBuddyMood() == BuddyMood::Engaged);
+  updateBehaviorEngine(99999);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+
+  // Real sounds can also build 100 engagement; after 90 seconds the retained
+  // engagement 55 overrides Sleepy, until decay finally drops below 40.
+  beginAt(0);
+  for (uint32_t now = 1; now <= 20; ++now) {
+    processBuddyEvent(BuddyEvent::SoundDetected, now);
+  }
+  finishAt(21);
+  updateBehaviorEngine(90020);
+  assert(getBuddyMood() == BuddyMood::Engaged);
+  updateBehaviorEngine(130000);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+}
+
+void testAutonomousAndDiagnosticReactionsAreNotActivity() {
+  beginAt(0);
+  processBuddyEvent(BuddyEvent::IdleTimeout, 20000);
+  finishAt(20001);
+  processBuddyEvent(BuddyEvent::IdleTimeout, 40000);
+  finishAt(40001);
+  triggerDiagnostic(DiagnosticReaction::Curious, 60000);
+  finishAt(60001);
+  triggerDiagnostic(DiagnosticReaction::Normal, 89999);
+  updateBehaviorEngine(90000);
+  expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Sleepy);
+}
+
+void testPhysicalSleepResetsWakingInactivity() {
+  beginAt(0);
+  processBuddyEvent(BuddyEvent::ButtonPressed, 10);
+  constexpr uint32_t wakeAt = 8 * 60 * 60 * 1000;
+  updateBehaviorEngine(wakeAt - 1);
+  expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, BuddyMood::Calm);
+  // Ignored sleeping input must not build scores or wake Buddy.
+  processBuddyEvent(BuddyEvent::Touch, wakeAt - 1);
+  processBuddyEvent(BuddyEvent::SoundDetected, wakeAt - 1);
+  processBuddyEvent(BuddyEvent::ButtonPressed, wakeAt);
+  updateBehaviorEngine(wakeAt);
+  expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Calm);
+  updateBehaviorEngine(wakeAt + 89999);
+  assert(getBuddyMood() == BuddyMood::Calm);
+  updateBehaviorEngine(wakeAt + 90000);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+}
+
+void testInactivityRolloverAndReinitialization() {
+  constexpr uint32_t anchor = std::numeric_limits<uint32_t>::max() - 45000;
+  beginAt(anchor);
+  updateBehaviorEngine(anchor + uint32_t{89999});
+  assert(getBuddyMood() == BuddyMood::Calm);
+  updateBehaviorEngine(anchor + uint32_t{90000});
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+  processBuddyEvent(BuddyEvent::SoundDetected, anchor + uint32_t{90001});
+  expectReaction(FaceExpression::Startled, ReactionSound::Startled,
+                 BuddyMood::Calm);
+  finishAt(anchor + uint32_t{90002});
+  updateBehaviorEngine(anchor + uint32_t{180000});
+  assert(getBuddyMood() == BuddyMood::Calm);
+  updateBehaviorEngine(anchor + uint32_t{180001});
+  assert(getBuddyMood() == BuddyMood::Sleepy);
+  beginBehaviorEngine(200000);
+  updateBehaviorEngine(289999);
+  assert(getBuddyMood() == BuddyMood::Calm);
+  updateBehaviorEngine(290000);
+  assert(getBuddyMood() == BuddyMood::Sleepy);
 }
 }  // namespace
 
@@ -515,7 +684,7 @@ int main() {
   testStartupAndAwakeIdleMoods();
   testTouchCoexistenceAndCompletion();
   testTouchLadderPreservesMood();
-  testSoundLadderPreservesMood();
+  testSoundLadderAlertsSleepy();
   testDiagnosticPersonalitiesPreserveMood();
   testSleepWakePreservesEveryMood();
   testDiagnosticNormalPreservesMood();
@@ -533,5 +702,13 @@ int main() {
   testRolloverDecayClock();
   testEventsDoNotRestartDecayClock();
   testDiagnosticSelectionRestartsDecayClock();
+  testInactivityBoundaryAndEligibility();
+  testSleepyAlertingAndSoundDelta();
+  testSoundSaturationWithoutIrritation();
+  testRealActivityRestartsInactivity();
+  testStrongMoodPrecedenceAndDiagnosticInactivity();
+  testAutonomousAndDiagnosticReactionsAreNotActivity();
+  testPhysicalSleepResetsWakingInactivity();
+  testInactivityRolloverAndReinitialization();
   return 0;
 }
