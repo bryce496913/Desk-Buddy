@@ -39,7 +39,9 @@ void loop() {
   }
 
   InputEvents inputEvents = updateInputs(now);
-  if (inputEvents.touch) processBuddyEvent(BuddyEvent::Touch, now);
+  if (inputEvents.touch != TouchGesture::None) {
+    processBuddyEvent(BuddyEvent::Touch, now);
+  }
   if (inputEvents.button) processBuddyEvent(BuddyEvent::ButtonPressed, now);
 
 #if DESK_BUDDY_DIAGNOSTICS

@@ -1,10 +1,16 @@
 #pragma once
 
-#include "BehaviorEngine.h"
+#include <stdint.h>
+
+enum class TouchGesture : uint8_t {
+  None,
+  Tap,
+  Hold
+};
 
 void beginInputs();
 struct InputEvents {
-  bool touch;
+  TouchGesture touch;
   bool button;
 };
 
