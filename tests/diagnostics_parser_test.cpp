@@ -17,6 +17,10 @@ int moodSetCount = 0;
 uint32_t lastMoodSetAt = 0;
 uint32_t lastTelemetryAt = 0;
 int telemetryReadCount = 0;
+DiagnosticRecentInteractionContext interaction = {
+    DiagnosticRecentInteractionType::None, 0, false};
+int interactionReadCount = 0;
+uint32_t interactionReadAt = 0;
 BuddyCoreState coreState = BuddyCoreState::Awake;
 
 void sendCommand(const char* command) {
@@ -29,6 +33,11 @@ void sendCommand(const char* command) {
 
 BuddyCoreState getBuddyCoreState() { return coreState; }
 BuddyMood getBuddyMood() { return currentMood; }
+DiagnosticRecentInteractionContext getDiagnosticRecentInteractionContext(uint32_t now) {
+  ++interactionReadCount;
+  interactionReadAt = now;
+  return interaction;
+}
 DiagnosticMoodState getDiagnosticMoodState(uint32_t now) {
   lastTelemetryAt = now;
   telemetryReadCount++;
@@ -66,6 +75,7 @@ int main() {
   assert(Serial.output.find("me: Engaged") != std::string::npos);
   assert(Serial.output.find("mg: Grumpy") != std::string::npos);
   assert(Serial.output.find("ms: Sleepy") != std::string::npos);
+  assert(Serial.output.find("i?: Recent interaction") != std::string::npos);
   Serial.clearOutput();
 
   // The first character only changes parser state; it never waits or triggers.
@@ -191,5 +201,38 @@ int main() {
   sendCommand("mg");
   assert(currentMood == BuddyMood::Grumpy);
   assert(coreState == BuddyCoreState::Sleeping);
+
+  Serial.clearOutput();
+  sendCommand("i?");
+  assert(Serial.output == "DIAG: Interaction = None\n");
+  assert(interactionReadAt == 200);
+  const auto readsBeforePending = interactionReadCount;
+  Serial.clearOutput();
+  Serial.push('i');
+  updateDiagnostics(300);
+  updateDiagnostics(301);
+  assert(Serial.output.empty());
+  assert(interactionReadCount == readsBeforePending);
+  Serial.push('x');
+  updateDiagnostics(302);
+  assert(Serial.output == "DIAG: Invalid interaction command (use i?)\n");
+  assert(interactionReadCount == readsBeforePending);
+  Serial.clearOutput();
+  interaction = {DiagnosticRecentInteractionType::Sound, 6200, false};
+  sendCommand("I?");
+  assert(Serial.output == "DIAG: Interaction = Sound | Age = 6200 ms | Recent = No\n");
+  interaction = {DiagnosticRecentInteractionType::TouchTap, 1250, true};
+  Serial.clearOutput();
+  sendCommand("i \n?");
+  assert(Serial.output == "DIAG: Interaction = TouchTap | Age = 1250 ms | Recent = Yes\n");
+  interaction = {DiagnosticRecentInteractionType::TouchHold, 0, true};
+  Serial.clearOutput();
+  sendCommand("i?");
+  assert(Serial.output == "DIAG: Interaction = TouchHold | Age = 0 ms | Recent = Yes\n");
+  const int triggersBeforeRecovery = triggerCount;
+  sendCommand("ixv14m?");
+  assert(triggerCount == triggersBeforeRecovery + 1);
+  assert(lastReaction == DiagnosticReaction::Startled);
+  assert(lastVariant == DiagnosticSoundVariant::Variant1);
   return 0;
 }

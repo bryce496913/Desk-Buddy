@@ -9,6 +9,30 @@ namespace {
 DiagnosticSoundVariant soundVariant = DiagnosticSoundVariant::Random;
 bool variantSelectorPending = false;
 bool moodSelectorPending = false;
+bool interactionSelectorPending = false;
+
+const char* interactionName(DiagnosticRecentInteractionType type) {
+  switch (type) {
+    case DiagnosticRecentInteractionType::None: return "None";
+    case DiagnosticRecentInteractionType::TouchTap: return "TouchTap";
+    case DiagnosticRecentInteractionType::TouchHold: return "TouchHold";
+    case DiagnosticRecentInteractionType::Sound: return "Sound";
+  }
+  return "Unknown";
+}
+
+void printInteractionTelemetry(uint32_t now) {
+  const auto context = getDiagnosticRecentInteractionContext(now);
+  Serial.print("DIAG: Interaction = ");
+  Serial.print(interactionName(context.type));
+  if (context.type != DiagnosticRecentInteractionType::None) {
+    Serial.print(" | Age = ");
+    Serial.print(context.ageMs);
+    Serial.print(" ms | Recent = ");
+    Serial.print(context.recent ? "Yes" : "No");
+  }
+  Serial.println();
+}
 
 const char* moodName(BuddyMood mood) {
   switch (mood) {
@@ -77,6 +101,8 @@ void printDiagnosticHelp() {
   Serial.println("me: Engaged");
   Serial.println("mg: Grumpy");
   Serial.println("ms: Sleepy");
+  Serial.println();
+  Serial.println("i?: Recent interaction type, age, and validity");
 }
 
 const char* reactionName(DiagnosticReaction reaction) {
@@ -101,6 +127,16 @@ void updateDiagnostics(uint32_t now) {
 
   const char command = static_cast<char>(Serial.read());
   if (command == '\r' || command == '\n' || command == ' ') return;
+
+  if (interactionSelectorPending) {
+    interactionSelectorPending = false;
+    if (command == '?') {
+      printInteractionTelemetry(now);
+    } else {
+      Serial.println("DIAG: Invalid interaction command (use i?)");
+    }
+    return;
+  }
 
   if (moodSelectorPending) {
     moodSelectorPending = false;
@@ -140,6 +176,10 @@ void updateDiagnostics(uint32_t now) {
   }
   if (command == 'm' || command == 'M') {
     moodSelectorPending = true;
+    return;
+  }
+  if (command == 'i' || command == 'I') {
+    interactionSelectorPending = true;
     return;
   }
   if (command == '?') {

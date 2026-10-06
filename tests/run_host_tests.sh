@@ -56,6 +56,12 @@ run_test "BuddyMood lifecycle" mood_lifecycle \
   "${REPO_ROOT}/tests/mood_lifecycle_test.cpp" \
   "${REPO_ROOT}/BehaviorEngine.cpp"
 
+run_test "cross interaction" cross_interaction \
+  -DDESK_BUDDY_DIAGNOSTICS=1 \
+  "${REPO_ROOT}/tests/cross_interaction_test.cpp" \
+  "${REPO_ROOT}/BehaviorEngine.cpp" \
+  "${REPO_ROOT}/Diagnostics.cpp"
+
 # Link Diagnostics.cpp separately so missing direct includes fail as they do in Arduino.
 run_test "diagnostic Serial parser" diagnostics_parser \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
