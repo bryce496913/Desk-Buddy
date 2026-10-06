@@ -76,43 +76,142 @@ void testFriendlyEngagementThenCalm() {
   expectMood(20000, BuddyMood::Calm, 35, 0, 19800);
 }
 
-void testTapAndHoldTemporaryEquivalence() {
-  for (BuddyEvent event : {BuddyEvent::TouchTap, BuddyEvent::TouchHold}) {
+void testHoldMoodContexts() {
+  const BuddyMood moods[] = {BuddyMood::Calm, BuddyMood::Engaged,
+                            BuddyMood::Grumpy, BuddyMood::Sleepy};
+  const uint8_t engagement[] = {30, 70, 30, 30};
+  const uint8_t irritation[] = {0, 0, 45, 0};
+  for (uint8_t index = 0; index < 4; ++index) {
     beginAt();
-    processBuddyEvent(event, 100);
-    expectReaction(FaceExpression::Happy, ReactionSound::Happy);
-    expectMood(100, BuddyMood::Calm, 20, 0, 0);
-    processBuddyEvent(event, 200);
-    expectReaction(FaceExpression::Curious, ReactionSound::Curious);
-    expectMood(200, BuddyMood::Engaged, 45, 0, 0);
-    processBuddyEvent(event, 300);
-    expectReaction(FaceExpression::Curious, ReactionSound::Curious);
-    expectMood(300, BuddyMood::Engaged, 50, 25, 0);
-    finishAt(301);
-    expectMood(301, BuddyMood::Engaged, 50, 25, 1);
-    processBuddyEvent(event, 6301);  // Same streak expiration for both events.
-    expectReaction(FaceExpression::Happy, ReactionSound::Happy);
-    expectMood(6301, BuddyMood::Engaged, 70, 25, 0);
-
-    processBuddyEvent(BuddyEvent::ButtonPressed, 6400);
-    const int facesBefore = faceStarts;
-    const int soundsBefore = soundStarts;
-    processBuddyEvent(event, 6500);
-    assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
-    assert(getBuddyReaction() == BuddyReaction::Idle);
-    expectMood(6500, BuddyMood::Engaged, 70, 25, 0);
-    assert(faceStarts == facesBefore && soundStarts == soundsBefore);
+    setDiagnosticMood(moods[index], 100);
+    processBuddyEvent(BuddyEvent::TouchHold, 200);
+    const bool curious = moods[index] == BuddyMood::Grumpy ||
+                         moods[index] == BuddyMood::Sleepy;
+    expectReaction(curious ? FaceExpression::Curious : FaceExpression::Happy,
+                   curious ? ReactionSound::Curious : ReactionSound::Happy);
+    expectMood(200, index == 1 ? BuddyMood::Engaged : BuddyMood::Calm,
+               engagement[index], irritation[index], 0);
+    // Grumpy and Sleepy become Calm, but their arrival mood selects Curious.
   }
 
-  // Tap and Hold share the existing touch history, rather than separate streaks.
+  beginAt();
+  updateBehaviorEngine(90000);  // Naturally Sleepy, with real inactivity.
+  expectMood(90000, BuddyMood::Sleepy, 0, 0, 90000);
+  processBuddyEvent(BuddyEvent::TouchHold, 90001);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
+  expectMood(90001, BuddyMood::Calm, 30, 0, 0);
+  finishAt(90002);
+  updateBehaviorEngine(180000);
+  expectMood(180000, BuddyMood::Calm, 0, 0, 89999);
+  updateBehaviorEngine(180001);
+  expectMood(180001, BuddyMood::Sleepy, 0, 0, 90000);
+}
+
+void testSeparateHoldsAndGrumpyRecovery() {
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchHold, 100);
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  expectMood(100, BuddyMood::Calm, 30, 0, 0);
+  processBuddyEvent(BuddyEvent::TouchHold, 200);
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  expectMood(200, BuddyMood::Engaged, 60, 0, 0);
+  processBuddyEvent(BuddyEvent::TouchHold, 300);
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  expectMood(300, BuddyMood::Engaged, 90, 0, 0);
+  processBuddyEvent(BuddyEvent::TouchHold, 400);
+  expectMood(400, BuddyMood::Engaged, 100, 0, 0);
+  assert(faceStarts == 4 && soundStarts == 4);
+
+  beginAt();
+  buildGrumpy();  // Natural scores: engagement 60, irritation 75.
+  processBuddyEvent(BuddyEvent::TouchHold, 200);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
+  expectMood(200, BuddyMood::Grumpy, 90, 60, 0);
+  processBuddyEvent(BuddyEvent::TouchHold, 300);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
+  expectMood(300, BuddyMood::Engaged, 100, 45, 0);
+  processBuddyEvent(BuddyEvent::TouchHold, 400);
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  expectMood(400, BuddyMood::Engaged, 100, 30, 0);
+  processBuddyEvent(BuddyEvent::TouchHold, 500);
+  expectMood(500, BuddyMood::Engaged, 100, 15, 0);
+  processBuddyEvent(BuddyEvent::TouchHold, 600);
+  expectMood(600, BuddyMood::Engaged, 100, 0, 0);
+  processBuddyEvent(BuddyEvent::TouchHold, 700);
+  expectMood(700, BuddyMood::Engaged, 100, 0, 0);
+}
+
+void testHoldLeavesTapHistoryAlone() {
   beginAt();
   processBuddyEvent(BuddyEvent::TouchTap, 100);
   processBuddyEvent(BuddyEvent::TouchHold, 200);
-  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
-  expectMood(200, BuddyMood::Engaged, 45, 0, 0);
+  expectMood(200, BuddyMood::Engaged, 50, 0, 0);
+  setDiagnosticMood(BuddyMood::Calm, 201);  // Remove mood ambiguity.
   processBuddyEvent(BuddyEvent::TouchTap, 300);
-  expectReaction(FaceExpression::Curious, ReactionSound::Curious);
-  expectMood(300, BuddyMood::Engaged, 50, 25, 0);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious);  // Tap #2.
+  expectMood(300, BuddyMood::Calm, 25, 0, 0);
+
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
+  processBuddyEvent(BuddyEvent::TouchHold, 3000);
+  setDiagnosticMood(BuddyMood::Calm, 3001);
+  processBuddyEvent(BuddyEvent::TouchTap, 6201);  // >6000 since Tap, <6000 since Hold.
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  expectMood(6201, BuddyMood::Calm, 20, 0, 0);
+}
+
+void testHoldLeavesSoundHistoryAndDecayAlone() {
+  beginAt();
+  processBuddyEvent(BuddyEvent::SoundDetected, 100);
+  processBuddyEvent(BuddyEvent::TouchHold, 200);
+  processBuddyEvent(BuddyEvent::SoundDetected, 300);
+  expectReaction(FaceExpression::Suspicious, ReactionSound::Suspicious);
+  expectMood(300, BuddyMood::Engaged, 40, 0, 0);
+
+  beginAt();
+  processBuddyEvent(BuddyEvent::SoundDetected, 100);
+  processBuddyEvent(BuddyEvent::TouchHold, 5000);
+  // No update yet, so no decay; scores remain below Engaged at arrival.
+  processBuddyEvent(BuddyEvent::SoundDetected, 10101);
+  expectReaction(FaceExpression::Startled, ReactionSound::Startled);
+  expectMood(10101, BuddyMood::Engaged, 40, 0, 0);
+
+  beginAt();
+  buildGrumpy();
+  processBuddyEvent(BuddyEvent::TouchHold, 9999);
+  expectMood(9999, BuddyMood::Grumpy, 90, 60, 0);
+  finishAt(10000);  // Hold did not restart the original decay clock.
+  expectMood(10000, BuddyMood::Engaged, 85, 50, 1);
+  updateBehaviorEngine(20000);
+  expectMood(20000, BuddyMood::Engaged, 80, 40, 10001);
+}
+
+void testSleepingIgnoresHold() {
+  beginAt();
+  buildGrumpy();
+  processBuddyEvent(BuddyEvent::ButtonPressed, 200);
+  const int facesBefore = faceStarts;
+  const int soundsBefore = soundStarts;
+  processBuddyEvent(BuddyEvent::TouchHold, 300);
+  assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
+  assert(getBuddyReaction() == BuddyReaction::Idle);
+  expectMood(300, BuddyMood::Grumpy, 60, 75, 0);
+  assert(faceStarts == facesBefore && soundStarts == soundsBefore);
+  processBuddyEvent(BuddyEvent::ButtonPressed, 400);
+  assert(getBuddyCoreState() == BuddyCoreState::Awake);
+  expectMood(400, BuddyMood::Grumpy, 60, 75, 0);
+}
+
+void testHoldAcrossRollover() {
+  constexpr uint32_t anchor = std::numeric_limits<uint32_t>::max() - 5000;
+  beginAt(anchor);
+  processBuddyEvent(BuddyEvent::TouchTap, anchor + 100);
+  processBuddyEvent(BuddyEvent::TouchHold, anchor + uint32_t{5500});
+  expectMood(anchor + uint32_t{5500}, BuddyMood::Engaged, 50, 0, 0);
+  setDiagnosticMood(BuddyMood::Calm, anchor + uint32_t{5501});
+  processBuddyEvent(BuddyEvent::TouchTap, anchor + uint32_t{6201});
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  expectMood(anchor + uint32_t{6201}, BuddyMood::Calm, 20, 0, 0);
 }
 
 void testExcessiveAttentionAndRecovery() {
@@ -318,7 +417,12 @@ void ignoreSoundSensorAfterWake() {}
 
 int main() {
   testFriendlyEngagementThenCalm();
-  testTapAndHoldTemporaryEquivalence();
+  testHoldMoodContexts();
+  testSeparateHoldsAndGrumpyRecovery();
+  testHoldLeavesTapHistoryAlone();
+  testHoldLeavesSoundHistoryAndDecayAlone();
+  testSleepingIgnoresHold();
+  testHoldAcrossRollover();
   testExcessiveAttentionAndRecovery();
   testInactivityThroughAutonomousReactions();
   testSleepyTouchAndSoundAlertness();

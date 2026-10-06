@@ -670,18 +670,16 @@ void testContextTouchAndSoundMappings() {
       {ReactionSound::Startled, ReactionSound::Startled, ReactionSound::Confused, ReactionSound::Confused}};
 
   for (BuddyMood mood : moods) {
-    for (BuddyEvent event : {BuddyEvent::TouchTap, BuddyEvent::TouchHold}) {
-      beginAt();
-      for (uint8_t index = 0; index < 4; ++index) {
-        // Force arrival mood for each event without resetting its history.
-        setDiagnosticMood(mood, 110 + index);
-        processBuddyEvent(event, 110 + index);
-        assert(getBuddyReaction() == BuddyReaction::Generic);
-        assert(expression == touchExpressions[static_cast<uint8_t>(mood)][index]);
-        assert(sound == touchSounds[static_cast<uint8_t>(mood)][index]);
-        if (index == 0 && mood == BuddyMood::Sleepy) {
-          assert(getBuddyMood() == BuddyMood::Calm);
-        }
+    beginAt();
+    for (uint8_t index = 0; index < 4; ++index) {
+      // Force arrival mood for each event without resetting its history.
+      setDiagnosticMood(mood, 110 + index);
+      processBuddyEvent(BuddyEvent::TouchTap, 110 + index);
+      assert(getBuddyReaction() == BuddyReaction::Generic);
+      assert(expression == touchExpressions[static_cast<uint8_t>(mood)][index]);
+      assert(sound == touchSounds[static_cast<uint8_t>(mood)][index]);
+      if (index == 0 && mood == BuddyMood::Sleepy) {
+        assert(getBuddyMood() == BuddyMood::Calm);
       }
     }
 

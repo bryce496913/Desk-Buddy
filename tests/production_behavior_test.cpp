@@ -210,17 +210,19 @@ void testAutonomousPersonalityAndHistories() {
 }
 
 void testInteractionPostponesAutonomy() {
-  beginAt(0);  // Initial deadline 20000.
-  processBuddyEvent(BuddyEvent::TouchTap, 19999);  // New deadline 39999.
-  faceReactionFinished = true;
-  soundEngineActive = false;
-  updateBehaviorEngine(20000);
-  assert(getBuddyReaction() == BuddyReaction::Idle);
-  assert(faceReactionStarts == 1);
-  updateBehaviorEngine(39998);
-  assert(faceReactionStarts == 1);
-  updateBehaviorEngine(39999);
-  assert(faceReactionStarts == 2);
+  for (BuddyEvent event : {BuddyEvent::TouchTap, BuddyEvent::TouchHold}) {
+    beginAt(0);  // Initial deadline 20000.
+    processBuddyEvent(event, 19999);  // New deadline 39999.
+    faceReactionFinished = true;
+    soundEngineActive = false;
+    updateBehaviorEngine(20000);
+    assert(getBuddyReaction() == BuddyReaction::Idle);
+    assert(faceReactionStarts == 1);
+    updateBehaviorEngine(39998);
+    assert(faceReactionStarts == 1);
+    updateBehaviorEngine(39999);
+    assert(faceReactionStarts == 2);
+  }
 
   beginAt(100000);  // Initial deadline 120000.
   processBuddyEvent(BuddyEvent::SoundDetected, 119999);
@@ -233,6 +235,18 @@ void testInteractionPostponesAutonomy() {
   assert(faceReactionStarts == 1);
   updateBehaviorEngine(139999);
   assert(faceReactionStarts == 2);
+
+  beginAt(0);
+  updateBehaviorEngine(20000);  // An autonomous reaction is already active.
+  assert(faceReactionStarts == 1);
+  processBuddyEvent(BuddyEvent::TouchHold, 20100);
+  expectReaction(FaceExpression::Happy, ReactionSound::Happy);
+  finishReactionAt(20500);
+  // Hold completion must not replace its deadline with an autonomous one.
+  updateBehaviorEngine(40099);
+  assert(faceReactionStarts == 2);
+  updateBehaviorEngine(40100);
+  assert(faceReactionStarts == 3);
 }
 
 void testAutonomyDoesNotChangeDecayPolicy() {
