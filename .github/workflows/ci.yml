@@ -12,8 +12,9 @@ permissions:
 env:
   ARDUINO_PICO_INDEX_URL: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
   ARDUINO_PICO_VERSION: 4.3.1
-  ADAFRUIT_GFX_VERSION: 1.12.1
+  ADAFRUIT_GFX_VERSION: 1.12.6
   ADAFRUIT_ST7735_VERSION: 1.11.0
+  ADAFRUIT_BUSIO_VERSION: 1.17.4
   PICO_FQBN: rp2040:rp2040:rpipico
 
 jobs:
@@ -54,9 +55,63 @@ jobs:
             --additional-urls "${ARDUINO_PICO_INDEX_URL}"
           arduino-cli core install "rp2040:rp2040@${ARDUINO_PICO_VERSION}" \
             --additional-urls "${ARDUINO_PICO_INDEX_URL}"
+          arduino-cli lib install "Adafruit BusIO@${ADAFRUIT_BUSIO_VERSION}"
+          arduino-cli lib install "Adafruit GFX Library@${ADAFRUIT_GFX_VERSION}" \
+            --no-deps
           arduino-cli lib install \
-            "Adafruit GFX Library@${ADAFRUIT_GFX_VERSION}" \
-            "Adafruit ST7735 and ST7789 Library@${ADAFRUIT_ST7735_VERSION}"
+            "Adafruit ST7735 and ST7789 Library@${ADAFRUIT_ST7735_VERSION}" \
+            --no-deps
+
+      - name: Verify pinned dependency versions
+        run: |
+          arduino-cli core list --format json > /tmp/arduino-cores.json
+          arduino-cli lib list --format json > /tmp/arduino-libraries.json
+          python3 - <<'PY'
+          import json
+          import os
+
+          with open("/tmp/arduino-cores.json", encoding="utf-8") as file:
+              core_data = json.load(file)
+          with open("/tmp/arduino-libraries.json", encoding="utf-8") as file:
+              library_data = json.load(file)
+
+          installed_cores = {
+              platform["id"]: platform["installed"]
+              for platform in core_data["platforms"]
+          }
+          installed_libraries = {
+              item["library"]["name"]: item["release"]["version"]
+              for item in library_data["installed_libraries"]
+          }
+          expected = {
+              "rp2040:rp2040": (
+                  os.environ["ARDUINO_PICO_VERSION"],
+                  installed_cores.get("rp2040:rp2040"),
+              ),
+              "Adafruit GFX Library": (
+                  os.environ["ADAFRUIT_GFX_VERSION"],
+                  installed_libraries.get("Adafruit GFX Library"),
+              ),
+              "Adafruit ST7735 and ST7789 Library": (
+                  os.environ["ADAFRUIT_ST7735_VERSION"],
+                  installed_libraries.get("Adafruit ST7735 and ST7789 Library"),
+              ),
+              "Adafruit BusIO": (
+                  os.environ["ADAFRUIT_BUSIO_VERSION"],
+                  installed_libraries.get("Adafruit BusIO"),
+              ),
+          }
+
+          mismatches = []
+          for dependency, (wanted, installed) in expected.items():
+              print(f"{dependency}: expected {wanted}, installed {installed}")
+              if installed != wanted:
+                  mismatches.append(
+                      f"{dependency}: expected {wanted}, installed {installed}"
+                  )
+          if mismatches:
+              raise SystemExit("Dependency version verification failed:\n" + "\n".join(mismatches))
+          PY
 
       - name: Verify Raspberry Pi Pico board is installed
         run: arduino-cli board details --fqbn "${PICO_FQBN}"
