@@ -235,7 +235,7 @@ void testInteractionPostponesAutonomy() {
   assert(faceReactionStarts == 2);
 }
 
-void testAutonomyPreservesAccumulatedMood() {
+void testAutonomyDoesNotChangeDecayPolicy() {
   const int touchCounts[] = {2, 5};
   for (int touchCount : touchCounts) {
     beginAt(0);
@@ -251,9 +251,12 @@ void testAutonomyPreservesAccumulatedMood() {
     assert(requestedExpression == FaceExpression::Curious ||
            requestedExpression == FaceExpression::Daydreaming);
     assert(requestedSound == ReactionSound::None);
-    assert(getBuddyMood() == mood);
+    // Two awake decay ticks precede autonomy; the reaction adds no mood effect.
+    const BuddyMood decayedMood =
+        touchCount == 2 ? BuddyMood::Calm : BuddyMood::Engaged;
+    assert(getBuddyMood() == decayedMood);
     finishReactionAt(20110);
-    assert(getBuddyMood() == mood);
+    assert(getBuddyMood() == decayedMood);
   }
 }
 
@@ -347,7 +350,7 @@ int main() {
   testSleepWakeAndHistoryReset();
   testAutonomousPersonalityAndHistories();
   testInteractionPostponesAutonomy();
-  testAutonomyPreservesAccumulatedMood();
+  testAutonomyDoesNotChangeDecayPolicy();
   testSleepSuppressesAutonomy();
   testRolloverSafeTiming();
   return 0;

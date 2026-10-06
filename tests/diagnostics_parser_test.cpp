@@ -14,6 +14,7 @@ DiagnosticSoundVariant lastVariant = DiagnosticSoundVariant::Random;
 int triggerCount = 0;
 BuddyMood currentMood = BuddyMood::Calm;
 int moodSetCount = 0;
+uint32_t lastMoodSetAt = 0;
 BuddyCoreState coreState = BuddyCoreState::Awake;
 
 void sendCommand(const char* command) {
@@ -26,7 +27,8 @@ void sendCommand(const char* command) {
 
 BuddyCoreState getBuddyCoreState() { return coreState; }
 BuddyMood getBuddyMood() { return currentMood; }
-void setDiagnosticMood(BuddyMood mood) {
+void setDiagnosticMood(BuddyMood mood, uint32_t now) {
+  lastMoodSetAt = now;
   currentMood = mood;
   moodSetCount++;
 }
@@ -120,12 +122,14 @@ int main() {
     sendCommand(commands[index]);
     assert(currentMood == moods[index]);
     assert(moodSetCount == index + 1);
+    assert(lastMoodSetAt == 200);
     const std::string expected = std::string("DIAG: Mood = ") + names[index] + "\n";
     assert(Serial.output == expected);
     Serial.clearOutput();
     sendCommand("m?");
     assert(Serial.output == expected);
     assert(moodSetCount == index + 1);
+    assert(lastMoodSetAt == 200);
   }
   assert(triggerCount == triggersBeforeMood);
 
@@ -141,6 +145,7 @@ int main() {
   updateDiagnostics(302);
   assert(currentMood == BuddyMood::Grumpy);
   assert(moodSetCount == 5);
+  assert(lastMoodSetAt == 302);
   assert(Serial.output == "DIAG: Mood = Grumpy\n");
 
   // Invalid selectors are consumed and normal reaction/variant parsing resumes.

@@ -93,10 +93,10 @@ void updateDiagnostics(uint32_t now) {
     moodSelectorPending = false;
     switch (command) {
       case '?': printCurrentMood(); return;
-      case 'c': setDiagnosticMood(BuddyMood::Calm); break;
-      case 'e': setDiagnosticMood(BuddyMood::Engaged); break;
-      case 'g': setDiagnosticMood(BuddyMood::Grumpy); break;
-      case 's': setDiagnosticMood(BuddyMood::Sleepy); break;
+      case 'c': setDiagnosticMood(BuddyMood::Calm, now); break;
+      case 'e': setDiagnosticMood(BuddyMood::Engaged, now); break;
+      case 'g': setDiagnosticMood(BuddyMood::Grumpy, now); break;
+      case 's': setDiagnosticMood(BuddyMood::Sleepy, now); break;
       default:
         Serial.println("DIAG: Invalid mood command (use m?, mc, me, mg, or ms)");
         return;
