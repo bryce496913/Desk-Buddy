@@ -66,6 +66,12 @@ run_test "FaceRenderer expression micro-motion" face_renderer_expression_motion 
   -I"${REPO_ROOT}/tests/renderer_stubs" \
   "${REPO_ROOT}/tests/face_renderer_expression_motion_test.cpp"
 
+run_test "FaceRenderer micro-animation lifecycle regression" face_renderer_regression \
+  -DDESK_BUDDY_DIAGNOSTICS=1 -DDESK_BUDDY_TEST_DRAW_TRACE=1 \
+  -I"${REPO_ROOT}/tests/renderer_stubs" \
+  "${REPO_ROOT}/tests/face_renderer_regression_test.cpp" \
+  "${REPO_ROOT}/BehaviorEngine.cpp" "${REPO_ROOT}/Diagnostics.cpp"
+
 run_test "diagnostic BehaviorEngine" diagnostics_behavior \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
   "${REPO_ROOT}/tests/diagnostics_behavior_test.cpp" \

@@ -67,6 +67,18 @@ bool reactionEntryTransitionActive = false;
 uint32_t reactionEntryStartedAt = 0;
 bool sideGlanceRight = false;
 bool curiousShiftRight = false;
+// Maximum extra motion relative to base geometry; all integer motion uses lroundf.
+constexpr int HAPPY_BOUNCE_PX = 3;
+constexpr float HAPPY_LID_LIFT = 0.03f;
+constexpr int CURIOUS_SHIFT_PX = 5;
+constexpr float ANNOYED_TOP_TIGHTEN = 0.08f;
+constexpr float ANNOYED_BOTTOM_TIGHTEN = 0.03f;
+constexpr int CONFUSED_DIVERGE_PX = 3;
+constexpr float STARTLED_TOP_SETTLE = 0.08f;
+constexpr float STARTLED_BOTTOM_SETTLE = 0.05f;
+constexpr int STARTLED_PUPIL_GROWTH_PX = 2;
+constexpr int STARTLED_IRIS_GROWTH_PX = 1;
+constexpr float STARTLED_SPARK_END_PROGRESS = 0.40f;
 FaceExpression activeExpression = FaceExpression::Normal;
 uint32_t lastFrameAt = 0;
 int backlightCurrent = 255;
@@ -171,33 +183,33 @@ EyeExpressionParams applyReactionMicroAnimation(
   switch (expression) {
     case FaceExpression::Happy: {
       const float bounce = smoothPulse(progress);
-      params.pupilBiasY -= int(lroundf(3.0f * bounce));
-      params.bottomLid += 0.03f * bounce;
+      params.pupilBiasY -= int(lroundf(HAPPY_BOUNCE_PX * bounce));
+      params.bottomLid += HAPPY_LID_LIFT * bounce;
       break;
     }
     case FaceExpression::Curious: {
       const float shift = smoothstep01((progress - 0.35f) / 0.25f);
-      params.pupilBiasX += (curiousShiftRight ? 1 : -1) * int(lroundf(5.0f * shift));
+      params.pupilBiasX += (curiousShiftRight ? 1 : -1) * int(lroundf(CURIOUS_SHIFT_PX * shift));
       break;
     }
     case FaceExpression::Annoyed: {
       const float tighten = smoothstep01(progress / 0.5f);
-      params.topLid += 0.08f * tighten;
-      params.bottomLid += 0.03f * tighten;
+      params.topLid += ANNOYED_TOP_TIGHTEN * tighten;
+      params.bottomLid += ANNOYED_BOTTOM_TIGHTEN * tighten;
       break;
     }
     case FaceExpression::Confused: {
       const float diverge = smoothstep01((progress - 0.30f) / 0.35f);
-      params.pupilBiasX += (isLeftEye ? -1 : 1) * int(lroundf(3.0f * diverge));
+      params.pupilBiasX += (isLeftEye ? -1 : 1) * int(lroundf(CONFUSED_DIVERGE_PX * diverge));
       break;
     }
     case FaceExpression::Startled: {
       const float settle = smoothstep01(progress);
-      params.topLid += 0.08f * settle;
-      params.bottomLid += 0.05f * settle;
-      params.pupilRadius += int(lroundf(2.0f * settle));
-      params.irisRadius += int(lroundf(settle));
-      params.showSpark = progress < 0.40f;
+      params.topLid += STARTLED_TOP_SETTLE * settle;
+      params.bottomLid += STARTLED_BOTTOM_SETTLE * settle;
+      params.pupilRadius += int(lroundf(STARTLED_PUPIL_GROWTH_PX * settle));
+      params.irisRadius += int(lroundf(STARTLED_IRIS_GROWTH_PX * settle));
+      params.showSpark = progress < STARTLED_SPARK_END_PROGRESS;
       break;
     }
     default:
