@@ -15,6 +15,7 @@ constexpr BuddyMood moods[] = {BuddyMood::Calm, BuddyMood::Engaged,
                                BuddyMood::Grumpy, BuddyMood::Sleepy};
 FaceExpression expression = FaceExpression::Normal;
 ReactionSound sound = ReactionSound::None;
+BuddyMood soundMood = BuddyMood::Calm;
 bool faceFinished = false;
 bool soundActive = false;
 int faceStarts = 0;
@@ -948,6 +949,23 @@ void testFirstSoundComparisonAndThresholdCrossing() {
   assert(getDiagnosticMoodState(20001).engagementScore == 40);
 }
 
+void testSoundMoodThresholdCrossing() {
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchTap, 110);
+  assert(soundMood == BuddyMood::Calm);
+  processBuddyEvent(BuddyEvent::TouchTap, 111);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Engaged);
+  assert(soundMood == BuddyMood::Calm); // Second Tap crosses into Engaged after selection.
+  processBuddyEvent(BuddyEvent::TouchTap, 112);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Engaged);
+  assert(soundMood == BuddyMood::Engaged);
+  beginAt();
+  setDiagnosticMood(BuddyMood::Sleepy, 100);
+  processBuddyEvent(BuddyEvent::TouchHold, 110);
+  expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Calm);
+  assert(soundMood == BuddyMood::Sleepy);
+}
+
 void testSleepySecondSoundUsesArrivalMood() {
   beginAt();
   processBuddyEvent(BuddyEvent::SoundDetected, 110);
@@ -956,6 +974,7 @@ void testSleepySecondSoundUsesArrivalMood() {
   // Post-event Calm would select Suspicious at streak 2; arrival Sleepy must
   // select Startled even though the sound clears Sleepy and resets inactivity.
   expectReaction(FaceExpression::Startled, ReactionSound::Startled, BuddyMood::Calm);
+  assert(soundMood == BuddyMood::Sleepy);
   const DiagnosticMoodState state = getDiagnosticMoodState(112);
   assert(state.engagementScore == 5 && state.irritationScore == 0);
   assert(state.inactivityMs == 0);
@@ -1006,7 +1025,8 @@ void finishFaceReaction(uint32_t) {
 }
 void enterSleepFace(uint32_t) {}
 void wakeFace(uint32_t) {}
-void startReactionSound(uint32_t, ReactionSound requestedSound) {
+void startReactionSound(uint32_t, ReactionSound requestedSound, BuddyMood mood) {
+  soundMood = mood;
   sound = requestedSound;
   soundActive = sound != ReactionSound::None;
   ++soundStarts;
@@ -1017,7 +1037,7 @@ bool startDiagnosticReactionSound(uint32_t now, ReactionSound requestedSound,
   selectedVariant = requestedSound == ReactionSound::None
       ? DIAGNOSTIC_RANDOM_VARIANT
       : (requestedVariant == DIAGNOSTIC_RANDOM_VARIANT ? 0 : requestedVariant);
-  startReactionSound(now, requestedSound);
+  startReactionSound(now, requestedSound, BuddyMood::Calm);
   return true;
 }
 void stopReactionSound() {
@@ -1068,6 +1088,7 @@ int main() {
   testTouchSoundContextOneStepAndIndependentHistories();
   testFirstSoundComparisonAndThresholdCrossing();
   testSleepySecondSoundUsesArrivalMood();
+  testSoundMoodThresholdCrossing();
   testDirectDiagnosticReactionsIgnoreMoodContext();
   testGrumpyTouchContextAfterPhysicalWake();
   return 0;

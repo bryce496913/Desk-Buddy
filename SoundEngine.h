@@ -17,7 +17,7 @@ void beginSoundEngine();
 void playBootSound();
 void playSleepSound();
 void playWakeSound();
-void startReactionSound(uint32_t now, ReactionSound sound);
+void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood);
 #if DESK_BUDDY_DIAGNOSTICS
 constexpr uint8_t DIAGNOSTIC_RANDOM_VARIANT = UINT8_MAX;
 bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,

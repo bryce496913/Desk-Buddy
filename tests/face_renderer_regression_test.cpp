@@ -32,9 +32,9 @@ void near(float actual, float expected) {
 HardwareSerial Serial;
 bool audioActive = false;
 int audioStops = 0;
-void startReactionSound(uint32_t, ReactionSound sound) { audioActive = sound != ReactionSound::None; }
+void startReactionSound(uint32_t, ReactionSound sound, BuddyMood) { audioActive = sound != ReactionSound::None; }
 bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound, uint8_t, uint8_t& selected) {
-  selected = 0; startReactionSound(now, sound); return true;
+  selected = 0; startReactionSound(now, sound, BuddyMood::Calm); return true;
 }
 void stopReactionSound() { audioActive = false; ++audioStops; }
 bool isSoundEngineActive() { return audioActive; }
