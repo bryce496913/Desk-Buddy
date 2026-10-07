@@ -8,10 +8,16 @@ enum class TouchGesture : uint8_t {
   Hold
 };
 
+enum class ButtonGesture : uint8_t {
+  None,
+  ShortPress,
+  LongPress
+};
+
 void beginInputs();
 struct InputEvents {
   TouchGesture touch;
-  bool button;
+  ButtonGesture button;
 };
 
 InputEvents updateInputs(uint32_t now);

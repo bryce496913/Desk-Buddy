@@ -5,6 +5,7 @@
 
 namespace {
 constexpr uint32_t TOUCH_HOLD_MS = 700;
+constexpr uint32_t BUTTON_LONG_PRESS_MS = 1000;
 bool touchLastRaw = false;
 bool touchStable = false;
 uint32_t touchDebounceAt = 0;
@@ -14,6 +15,9 @@ bool touchHoldEmitted = false;
 bool buttonLastRaw = false;
 bool buttonStable = false;
 uint32_t buttonDebounceAt = 0;
+uint32_t buttonPressedAt = 0;
+bool buttonGestureActive = false;
+bool buttonLongPressEmitted = false;
 }
 
 void beginInputs() {
@@ -31,10 +35,13 @@ void beginInputs() {
   touchGestureActive = false;
   touchHoldEmitted = false;
   touchPressedAt = now;
+  buttonGestureActive = false;
+  buttonLongPressEmitted = false;
+  buttonPressedAt = now;
 }
 
 InputEvents updateInputs(uint32_t now) {
-  InputEvents events = {TouchGesture::None, false};
+  InputEvents events = {TouchGesture::None, ButtonGesture::None};
   bool rawTouch = digitalRead(TOUCH_PIN) == HIGH;
   if (rawTouch != touchLastRaw) {
     touchLastRaw = rawTouch;
@@ -74,8 +81,27 @@ InputEvents updateInputs(uint32_t now) {
   if ((now - buttonDebounceAt) > 25 && rawButton != buttonStable) {
     buttonStable = rawButton;
     if (buttonStable) {
-      events.button = true;
+      buttonPressedAt = now;
+      buttonGestureActive = true;
+      buttonLongPressEmitted = false;
+    } else if (buttonGestureActive) {
+      if (!buttonLongPressEmitted) {
+        // The first observed release candidate bounds the physical hold duration.
+        // Debounce confirmation must not lengthen a short press; sparse updates
+        // can still recognize a long press first observed on release.
+        events.button = static_cast<uint32_t>(buttonDebounceAt - buttonPressedAt) >=
+                                BUTTON_LONG_PRESS_MS
+            ? ButtonGesture::LongPress : ButtonGesture::ShortPress;
+      }
+      buttonGestureActive = false;
     }
+  }
+  // Suppress threshold emission while release debounce is pending. A brief
+  // bounce back to LOW resumes the original timer without creating a new press.
+  if (buttonGestureActive && rawButton && !buttonLongPressEmitted &&
+      static_cast<uint32_t>(now - buttonPressedAt) >= BUTTON_LONG_PRESS_MS) {
+    events.button = ButtonGesture::LongPress;
+    buttonLongPressEmitted = true;
   }
   return events;
 }

@@ -50,7 +50,11 @@ void loop() {
     default:
       break;
   }
-  if (inputEvents.button) processBuddyEvent(BuddyEvent::ButtonPressed, now);
+  // Transitional routing: both gestures retain the existing sleep/wake action.
+  if (inputEvents.button == ButtonGesture::ShortPress ||
+      inputEvents.button == ButtonGesture::LongPress) {
+    processBuddyEvent(BuddyEvent::ButtonPressed, now);
+  }
 
 #if DESK_BUDDY_DIAGNOSTICS
   updateDiagnostics(now);
