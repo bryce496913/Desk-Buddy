@@ -577,6 +577,34 @@ DiagnosticAutonomousTimingState getDiagnosticAutonomousTimingState(uint32_t now)
   return {autonomousBehaviorScheduled, mood, remaining, range.minMs, range.maxMs};
 }
 
+bool triggerDiagnosticAutonomousEvent(uint32_t now, DiagnosticAutonomousBehavior &selected) {
+  if (coreState != BuddyCoreState::Awake) return false;
+  // Explicit tuning may replace a reaction. Evaluate genuine idle eligibility
+  // before choosing the new autonomous personality, without recording activity.
+  stopReactionSound();
+  activeReaction = BuddyReaction::Idle;
+  const bool scoresDecayed = decayMoodScores(now);
+  // Match updateBehaviorEngine's refresh rule: retain forced diagnostic mood
+  // until decay or genuine waking inactivity requires a time-based update.
+  if (scoresDecayed || static_cast<uint32_t>(now - lastMeaningfulActivityAt) >= SLEEPY_AFTER_INACTIVITY_MS)
+    updateMoodState(now);
+  disableAutonomousBehavior();
+  const AutonomousBehavior behavior = selectAutonomousBehavior(currentMood);
+  const AutonomousBehaviorPlan plan = planForAutonomousBehavior(behavior);
+  switch (behavior) {
+    case AutonomousBehavior::Curious: selected = DiagnosticAutonomousBehavior::Curious; break;
+    case AutonomousBehavior::Daydreaming: selected = DiagnosticAutonomousBehavior::Daydreaming; break;
+    case AutonomousBehavior::SideGlance: selected = DiagnosticAutonomousBehavior::SideGlance; break;
+    case AutonomousBehavior::Bored: selected = DiagnosticAutonomousBehavior::Bored; break;
+    case AutonomousBehavior::SleepyDrift: selected = DiagnosticAutonomousBehavior::SleepyDrift; break;
+    case AutonomousBehavior::SuspiciousGlance: selected = DiagnosticAutonomousBehavior::SuspiciousGlance; break;
+    case AutonomousBehavior::ExcitedScanning: selected = DiagnosticAutonomousBehavior::ExcitedScanning; break;
+    case AutonomousBehavior::AnnoyedSquint: selected = DiagnosticAutonomousBehavior::AnnoyedSquint; break;
+  }
+  startGenericReaction(now, plan.expression, plan.sound, currentMood);
+  return true;
+}
+
 bool triggerDiagnosticAutonomousBehavior(DiagnosticAutonomousBehavior requested,
                                          uint32_t now) {
   if (coreState != BuddyCoreState::Awake) return false;

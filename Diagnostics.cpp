@@ -147,10 +147,11 @@ void printEventHelp() {
   Serial.println("Diagnostic production events (mutate real interaction state):");
   Serial.println("et: Simulate TouchTap");
   Serial.println("eh: Simulate TouchHold");
+  Serial.println("ea: One production mood-weighted autonomous event (unlike a1-a8 showcases)");
 }
 
 void printDiagnosticHelp() {
-  Serial.println("e?: Production event help | et: TouchTap | eh: TouchHold (mutate state)");
+  Serial.println("e?: Production event help | et: TouchTap | eh: TouchHold | ea: Production autonomy");
   Serial.println("q?: Sound mode | qn: Normal | qq: Quiet");
   Serial.println("s?: Last random sound selection | sw: Current mood sound weights");
   Serial.println("Desk Buddy diagnostics");
@@ -214,10 +215,21 @@ void updateDiagnostics(uint32_t now) {
   if (eventSelectorPending) {
     eventSelectorPending = false;
     if (command == '?') { printEventHelp(); return; }
+    if (command == 'a' || command == 'A') {
+      DiagnosticAutonomousBehavior selected;
+      if (!triggerDiagnosticAutonomousEvent(now, selected)) {
+        Serial.println("DIAG: Autonomous event ignored while sleeping");
+      } else {
+        Serial.print("DIAG AUTO: Mood = "); Serial.print(moodName(getBuddyMood()));
+        Serial.print(" | Selected = ");
+        Serial.println(autonomousNames[static_cast<uint8_t>(selected)]);
+      }
+      return;
+    }
     const bool tap = command == 't' || command == 'T';
     const bool hold = command == 'h' || command == 'H';
     if (!tap && !hold) {
-      Serial.println("DIAG: Invalid event command (use e?, et or eh)");
+      Serial.println("DIAG: Invalid event command (use e?, et, eh or ea)");
       return;
     }
     // Production events intentionally mutate history and obey Quiet/Sleep,
