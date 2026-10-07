@@ -181,74 +181,74 @@ void testSleepWakeAndHistoryReset() {
 }
 
 void testAutonomousPersonalityAndHistories() {
-  beginAt(1000);  // The deterministic deadline is 21000.
+  beginAt(1000);  // The deterministic deadline is 29000.
   updateBehaviorEngine(1000);
-  updateBehaviorEngine(20999);
+  updateBehaviorEngine(28999);
   assert(getBuddyReaction() == BuddyReaction::Idle);
   assert(faceReactionStarts == 0);
 
-  updateBehaviorEngine(21000);
+  updateBehaviorEngine(29000);
   assert(getBuddyReaction() == BuddyReaction::Generic);
   assert(isAutonomousExpressionForMood(requestedExpression, getBuddyMood()));
   assert(getBuddyMood() == BuddyMood::Calm);
   assert(requestedSound == ReactionSound::None);
   assert(!soundEngineActive);
-  finishReactionAt(21500);
+  finishReactionAt(29500);
 
   // Completion schedules a new future deadline, not another immediate event.
   const int startsAfterCompletion = faceReactionStarts;
-  updateBehaviorEngine(21500);
-  updateBehaviorEngine(41499);
+  updateBehaviorEngine(29500);
+  updateBehaviorEngine(57499);
   assert(faceReactionStarts == startsAfterCompletion);
-  updateBehaviorEngine(41500);
+  updateBehaviorEngine(57500);
   assert(faceReactionStarts == startsAfterCompletion + 1);
   assert(getBuddyMood() == BuddyMood::Calm);
-  finishReactionAt(41600);
+  finishReactionAt(57600);
 
   // Autonomous reactions do not contribute to either interaction streak.
-  processBuddyEvent(BuddyEvent::TouchTap, 41610);
+  processBuddyEvent(BuddyEvent::TouchTap, 57610);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
-  processBuddyEvent(BuddyEvent::SoundDetected, 41620);
+  processBuddyEvent(BuddyEvent::SoundDetected, 57620);
   expectReaction(FaceExpression::Confused, ReactionSound::Confused);
 }
 
 void testInteractionPostponesAutonomy() {
   for (BuddyEvent event : {BuddyEvent::TouchTap, BuddyEvent::TouchHold}) {
-    beginAt(0);  // Initial deadline 20000.
-    processBuddyEvent(event, 19999);  // New deadline 39999.
+    beginAt(0);  // Initial deadline 28000.
+    processBuddyEvent(event, 19999);  // New deadline 47999.
     faceReactionFinished = true;
     soundEngineActive = false;
-    updateBehaviorEngine(20000);
+    updateBehaviorEngine(28000);
     assert(getBuddyReaction() == BuddyReaction::Idle);
     assert(faceReactionStarts == 1);
-    updateBehaviorEngine(39998);
+    updateBehaviorEngine(47998);
     assert(faceReactionStarts == 1);
-    updateBehaviorEngine(39999);
+    updateBehaviorEngine(47999);
     assert(faceReactionStarts == 2);
   }
 
-  beginAt(100000);  // Initial deadline 120000.
+  beginAt(100000);  // Initial Calm deadline 128000.
   processBuddyEvent(BuddyEvent::SoundDetected, 119999);
   faceReactionFinished = true;
   soundEngineActive = false;
   updateBehaviorEngine(120000);
   assert(getBuddyReaction() == BuddyReaction::Idle);
   assert(faceReactionStarts == 1);
-  updateBehaviorEngine(139998);
+  updateBehaviorEngine(147998);
   assert(faceReactionStarts == 1);
-  updateBehaviorEngine(139999);
+  updateBehaviorEngine(147999);
   assert(faceReactionStarts == 2);
 
   beginAt(0);
-  updateBehaviorEngine(20000);  // An autonomous reaction is already active.
+  updateBehaviorEngine(28000);  // An autonomous reaction is already active.
   assert(faceReactionStarts == 1);
-  processBuddyEvent(BuddyEvent::TouchHold, 20100);
+  processBuddyEvent(BuddyEvent::TouchHold, 28100);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy);
-  finishReactionAt(20500);
+  finishReactionAt(28500);
   // Hold completion must not replace its deadline with an autonomous one.
-  updateBehaviorEngine(40099);
+  updateBehaviorEngine(56099);
   assert(faceReactionStarts == 2);
-  updateBehaviorEngine(40100);
+  updateBehaviorEngine(56100);
   assert(faceReactionStarts == 3);
 }
 
@@ -263,15 +263,15 @@ void testAutonomyDoesNotChangeDecayPolicy() {
     assert(getBuddyMood() == mood);
     finishReactionAt(110);
     // Last touch schedules the deterministic autonomous deadline.
-    updateBehaviorEngine(20099 + touchCount);
+    const uint32_t deadline = 99 + touchCount + (touchCount == 2 ? 12000 : 20000);
+    updateBehaviorEngine(deadline);
     assert(getBuddyReaction() == BuddyReaction::Generic);
     assert(isAutonomousExpressionForMood(requestedExpression, getBuddyMood()));
     assert(requestedSound == ReactionSound::None);
-    // Two awake decay ticks precede autonomy; the reaction adds no mood effect.
-    const BuddyMood decayedMood =
-        touchCount == 2 ? BuddyMood::Calm : BuddyMood::Engaged;
+    // One Engaged or two Grumpy decay ticks precede autonomy, without score effects.
+    const BuddyMood decayedMood = BuddyMood::Engaged;
     assert(getBuddyMood() == decayedMood);
-    finishReactionAt(20110);
+    finishReactionAt(deadline + 10);
     assert(getBuddyMood() == decayedMood);
   }
 }
@@ -280,7 +280,7 @@ void testScheduledAutonomyDoesNotPreventSleepy() {
   beginAt(0);
   // Real production scheduling runs during inactivity. Neither the reactions
   // nor their completions may postpone the 90-second meaningful-activity clock.
-  const uint32_t deadlines[] = {20000, 40100, 60200, 80300};
+  const uint32_t deadlines[] = {28000, 56100, 84200};
   for (uint32_t deadline : deadlines) {
     updateBehaviorEngine(deadline);
     assert(getBuddyReaction() == BuddyReaction::Generic);
@@ -330,10 +330,10 @@ void testSleepSuppressesAutonomy() {
 
   processBuddyEvent(BuddyEvent::ButtonPressed, 1000000);
   updateBehaviorEngine(1000000);
-  updateBehaviorEngine(1019999);
+  updateBehaviorEngine(1027999);
   assert(getBuddyReaction() == BuddyReaction::Idle);
   assert(faceReactionStarts == 0);
-  updateBehaviorEngine(1020000);
+  updateBehaviorEngine(1028000);
   assert(getBuddyReaction() == BuddyReaction::Generic);
   assert(requestedSound == ReactionSound::None);
 }
@@ -355,10 +355,10 @@ void testRolloverSafeTiming() {
   processBuddyEvent(BuddyEvent::SoundDetected, 16001);  // 10001 ms elapsed.
   expectReaction(FaceExpression::Startled, ReactionSound::Startled);
 
-  beginAt(max - 10000);  // Deadline wraps to 9999.
-  updateBehaviorEngine(9998);
+  beginAt(max - 10000);  // Deadline wraps to 17999.
+  updateBehaviorEngine(17998);
   assert(getBuddyReaction() == BuddyReaction::Idle);
-  updateBehaviorEngine(9999);
+  updateBehaviorEngine(17999);
   assert(getBuddyReaction() == BuddyReaction::Generic);
   assert(requestedSound == ReactionSound::None);
 }
@@ -371,7 +371,7 @@ long random(long maximum) {
 
 long random(long minimum, long maximum) {
   assert(minimum < maximum);
-  return minimum;  // Make every autonomous delay exactly 20000 ms.
+  return minimum;  // Use the minimum of the current mood timing range.
 }
 
 void scheduleFaceBehavior(uint32_t) {}

@@ -66,6 +66,13 @@ run_test "weighted autonomous selection" autonomous_weighted_selection \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
   "${REPO_ROOT}/tests/autonomous_weighted_selection_test.cpp"
 
+run_test "production autonomous timing" autonomous_timing \
+  "${REPO_ROOT}/tests/autonomous_timing_test.cpp"
+
+run_test "diagnostic autonomous scheduling suppression" autonomous_timing_diagnostics \
+  -DDESK_BUDDY_DIAGNOSTICS=1 \
+  "${REPO_ROOT}/tests/autonomous_timing_test.cpp"
+
 run_test "cross interaction" cross_interaction \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
   "${REPO_ROOT}/tests/cross_interaction_test.cpp" \
