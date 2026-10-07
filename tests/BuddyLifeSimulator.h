@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include "FaceRenderer.h"
 #include "SoundEngine.h"
 
@@ -25,6 +26,15 @@ struct BuddyLifeSnapshot {
   bool soundActive;
 };
 
+enum class SimulatedBuddyEvent : uint8_t {
+  Tap, Hold, Sound, ShortButtonPress, LongButtonPress, Autonomous, Checkpoint
+};
+struct ScheduledBuddyEvent {
+  uint32_t atMs;  // Elapsed offset from runScript's starting time, even across wrap.
+  SimulatedBuddyEvent event;
+};
+using BuddyLifeObserver = void (*)(const BuddyLifeSnapshot&, const char* event, void* context);
+
 // BehaviorEngine and its stubs are process-global: use one simulation at a time.
 // Link this implementation and actual BehaviorEngine.cpp, without hardware engines.
 // Define DESK_BUDDY_TEST_LIFE_SIMULATOR=1 to reset autonomous history between runs.
@@ -46,6 +56,14 @@ class BuddyLifeSimulator {
   // FIFO tickets normalized to each random call's range; empty queue returns minimum.
   void queueRandom(uint32_t value);
   void clearRandomQueue();
+  // Called after reset, every update tick, and every event; must not mutate the simulator.
+  void setObserver(BuddyLifeObserver observer, void* context = nullptr);
+  // Ordered offsets, endAt is also an elapsed offset. Invalid scripts return false
+  // before advancing time or injecting anything. Checkpoint observes without an event.
+  bool runScript(const ScheduledBuddyEvent* events, size_t count, uint32_t endAt);
  private:
   void event(BuddyEvent value);
+  void observe(const char* label) const;
+  BuddyLifeObserver observer_ = nullptr;
+  void* observerContext_ = nullptr;
 };
