@@ -14,6 +14,7 @@ bool autonomousSelectorPending = false;
 bool timingSelectorPending = false;
 bool soundSelectorPending = false;
 bool quietSelectorPending = false;
+bool eventSelectorPending = false;
 const char* const autonomousNames[] = {
     "Curious", "Daydreaming", "SideGlance", "Bored", "SuspiciousGlance",
     "AnnoyedSquint", "SleepyDrift", "ExcitedScanning"};
@@ -142,7 +143,14 @@ void printSoundWeights() {
   }
 }
 
+void printEventHelp() {
+  Serial.println("Diagnostic production events (mutate real interaction state):");
+  Serial.println("et: Simulate TouchTap");
+  Serial.println("eh: Simulate TouchHold");
+}
+
 void printDiagnosticHelp() {
+  Serial.println("e?: Production event help | et: TouchTap | eh: TouchHold (mutate state)");
   Serial.println("q?: Sound mode | qn: Normal | qq: Quiet");
   Serial.println("s?: Last random sound selection | sw: Current mood sound weights");
   Serial.println("Desk Buddy diagnostics");
@@ -202,6 +210,24 @@ void updateDiagnostics(uint32_t now) {
 
   const char command = static_cast<char>(Serial.read());
   if (command == '\r' || command == '\n' || command == ' ') return;
+
+  if (eventSelectorPending) {
+    eventSelectorPending = false;
+    if (command == '?') { printEventHelp(); return; }
+    const bool tap = command == 't' || command == 'T';
+    const bool hold = command == 'h' || command == 'H';
+    if (!tap && !hold) {
+      Serial.println("DIAG: Invalid event command (use e?, et or eh)");
+      return;
+    }
+    // Production events intentionally mutate history and obey Quiet/Sleep,
+    // unlike direct reaction showcases and explicit sound auditions.
+    processBuddyEvent(tap ? BuddyEvent::TouchTap : BuddyEvent::TouchHold, now);
+    if (getBuddyCoreState() == BuddyCoreState::Sleeping) {
+      Serial.println("DIAG: Event ignored while sleeping");
+    } else Serial.println(tap ? "DIAG EVENT: TouchTap" : "DIAG EVENT: TouchHold");
+    return;
+  }
 
   if (quietSelectorPending) {
     quietSelectorPending = false;
@@ -305,6 +331,10 @@ void updateDiagnostics(uint32_t now) {
   }
   if (command == 'a' || command == 'A') {
     autonomousSelectorPending = true;
+    return;
+  }
+  if (command == 'e' || command == 'E') {
+    eventSelectorPending = true;
     return;
   }
   if (command == 'q' || command == 'Q') {

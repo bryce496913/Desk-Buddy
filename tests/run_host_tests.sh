@@ -122,6 +122,11 @@ run_test "Quiet audio policy integration" quiet_audio_policy \
   "${REPO_ROOT}/tests/quiet_audio_policy_test.cpp" \
   "${REPO_ROOT}/BehaviorEngine.cpp" "${REPO_ROOT}/Diagnostics.cpp"
 
+run_test "diagnostic production touch events" diagnostic_touch_events \
+  -DDESK_BUDDY_DIAGNOSTICS=1 \
+  "${REPO_ROOT}/tests/diagnostic_touch_events_test.cpp" \
+  "${REPO_ROOT}/BehaviorEngine.cpp" "${REPO_ROOT}/Diagnostics.cpp"
+
 # Link Diagnostics.cpp separately so missing direct includes fail as they do in Arduino.
 run_test "diagnostic Serial parser" diagnostics_parser \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
