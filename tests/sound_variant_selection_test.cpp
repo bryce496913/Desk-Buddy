@@ -31,13 +31,28 @@ int main() {
     {ReactionSound::Suspicious, SoundSequence::SuspiciousReaction, SUSPICIOUS_REACTION_SEQUENCES, &lastSuspiciousVariant},
     {ReactionSound::Confused, SoundSequence::ConfusedReaction, CONFUSED_REACTION_SEQUENCES, &lastConfusedVariant}
   };
+  // Independent specification: six families, each with Calm/Engaged/Grumpy/Sleepy rows.
+  const uint8_t expected[6][4][3] = {
+    {{45,35,20},{25,30,45},{50,35,15},{55,35,10}},
+    {{40,35,25},{45,30,25},{15,30,55},{15,55,30}},
+    {{40,30,30},{35,20,45},{20,55,25},{45,40,15}},
+    {{45,30,25},{25,45,30},{30,20,50},{30,55,15}},
+    {{40,35,25},{25,45,30},{20,30,50},{35,20,45}},
+    {{40,35,25},{45,35,20},{20,30,50},{20,50,30}}
+  };
   for (BuddyMood mood : {BuddyMood::Calm, BuddyMood::Engaged, BuddyMood::Grumpy, BuddyMood::Sleepy}) {
+    int familyIndex = 0;
     for (const auto& family : families) {
       const auto weights = weightsFor(family.sound, mood);
-      assert(weights.values[0] == 1 && weights.values[1] == 1 && weights.values[2] == 1);
+      for (int index = 0; index < 3; ++index) {
+        assert(weights.values[index] == expected[familyIndex][static_cast<uint8_t>(mood)][index]);
+        assert(weights.values[index] > 0);
+      }
+      assert(weights.values[0] + weights.values[1] + weights.values[2] == 100);
       for (uint8_t previous : {uint8_t{0}, uint8_t{1}, uint8_t{2}, uint8_t{UINT8_MAX}}) {
-        bool eligible[3]{};
-        expectedPool = previous == UINT8_MAX ? 3 : 2;
+        int counts[3]{};
+        int previousTicketResult = -1;
+        expectedPool = previous == UINT8_MAX ? 100 : 100 - weights.values[previous];
         for (ticket = 0; ticket < expectedPool; ++ticket) {
           *family.previous = previous;
           const int before = draws;
@@ -45,11 +60,22 @@ int main() {
           assert(draws == before + 1);
           const uint8_t selected = *family.previous;
           assert(selected < 3 && selected != previous);
-          eligible[selected] = true;
+          ++counts[selected];
+          // Nondecreasing ticket results plus exact counts prove every bucket boundary.
+          assert(selected >= previousTicketResult);
+          previousTicketResult = selected;
           assert(currentSequence == family.sequence && currentDefinition == &family.definitions[selected]);
+#if DESK_BUDDY_DIAGNOSTICS
+          *family.previous = previous;
+          uint8_t diagnosticSelected = UINT8_MAX;
+          assert(startDiagnosticReactionSound(100, family.sound, DIAGNOSTIC_RANDOM_VARIANT,
+                                             diagnosticSelected, mood));
+          assert(diagnosticSelected == selected && *family.previous == selected);
+          assert(currentDefinition == &family.definitions[selected]);
+#endif
         }
         for (uint8_t index = 0; index < 3; ++index)
-          assert(eligible[index] == (index != previous));
+          assert(counts[index] == (index == previous ? 0 : weights.values[index]));
       }
 #if DESK_BUDDY_DIAGNOSTICS
       // Forced variants remain exact even when they repeat the previous selection.
@@ -57,11 +83,12 @@ int main() {
         *family.previous = forced;
         uint8_t selected = UINT8_MAX;
         const int before = draws;
-        assert(startDiagnosticReactionSound(100, family.sound, forced, selected));
+        assert(startDiagnosticReactionSound(100, family.sound, forced, selected, mood));
         assert(selected == forced && draws == before);
         assert(currentDefinition == &family.definitions[forced]);
       }
 #endif
+      ++familyIndex;
     }
     const int before = draws;
     startReactionSound(100, ReactionSound::None, mood);
