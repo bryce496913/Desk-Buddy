@@ -49,6 +49,25 @@ int main() {
       assert(*reaction.lastVariant == UINT8_MAX);
     }
 
+    // Forced v2 repeats, preserving prior production history and its telemetry.
+    *reaction.lastVariant = 0;
+    nextRandom = 0;
+    assert(startDiagnosticReactionSound(100, reaction.sound, DIAGNOSTIC_RANDOM_VARIANT,
+                                        selected, BuddyMood::Grumpy));
+    const auto history = *reaction.lastVariant;
+    const auto snapshot = getDiagnosticSoundSelection();
+    assert(snapshot.valid && snapshot.sound == reaction.sound && snapshot.mood == BuddyMood::Grumpy);
+    for (int repeat = 0; repeat < 2; ++repeat) {
+      assert(startDiagnosticReactionSound(100, reaction.sound, 1, selected, BuddyMood::Sleepy));
+      assert(selected == 1 && currentDefinition == &reaction.sequences[1]);
+      assert(*reaction.lastVariant == history);
+      const auto afterForced = getDiagnosticSoundSelection();
+      assert(afterForced.variantIndex == snapshot.variantIndex && afterForced.mood == snapshot.mood);
+    }
+    assert(startDiagnosticReactionSound(100, reaction.sound, DIAGNOSTIC_RANDOM_VARIANT,
+                                        selected, BuddyMood::Grumpy));
+    assert(selected != history && *reaction.lastVariant == selected);
+
     const SequenceDefinition *beforeInvalid = currentDefinition;
     assert(!startDiagnosticReactionSound(101, reaction.sound, reaction.count,
                                          selected, BuddyMood::Calm));
@@ -65,6 +84,7 @@ int main() {
 
   assert(startDiagnosticReactionSound(103, ReactionSound::None, 2, selected, BuddyMood::Calm));
   assert(selected == DIAGNOSTIC_RANDOM_VARIANT);
+  assert(!getDiagnosticSoundSelection().valid);
   assert(currentSequence == SoundSequence::None);
   return 0;
 }

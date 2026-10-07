@@ -262,6 +262,16 @@ VariantWeights weightsFor(ReactionSound sound, BuddyMood mood) {
   return MOOD_VARIANT_PROFILES[family][context];
 }
 
+#if DESK_BUDDY_DIAGNOSTICS
+DiagnosticSoundSelection lastSoundSelection{false, ReactionSound::None, BuddyMood::Calm, 0};
+void recordSoundSelection(ReactionSound sound, BuddyMood mood, uint8_t variant) {
+  lastSoundSelection = {true, sound, mood, variant};
+}
+void clearSoundSelection() {
+  lastSoundSelection = {false, ReactionSound::None, BuddyMood::Calm, 0};
+}
+#endif
+
 uint8_t selectWeightedVariant(const VariantWeights &weights, uint8_t &lastVariant) {
   uint16_t total = 0;
   for (uint8_t weight : weights.values) total += weight;
@@ -287,6 +297,9 @@ uint8_t selectWeightedVariant(const VariantWeights &weights, uint8_t &lastVarian
 }  // namespace
 
 void beginSoundEngine() {
+#if DESK_BUDDY_DIAGNOSTICS
+  clearSoundSelection();
+#endif
   pinMode(BUZZER_PIN, OUTPUT);
   stopSequence();
 }
@@ -306,22 +319,34 @@ void playWakeSound() {
 void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood) {
   switch (sound) {
     case ReactionSound::None:
+#if DESK_BUDDY_DIAGNOSTICS
+      clearSoundSelection();
+#endif
       stopReactionSound();
       break;
     case ReactionSound::Happy: {
       uint8_t variant = selectWeightedVariant(weightsFor(sound, mood), lastHappyVariant);
+#if DESK_BUDDY_DIAGNOSTICS
+      recordSoundSelection(sound, mood, variant);
+#endif
       startSequence(SoundSequence::HappyReaction,
                     HAPPY_REACTION_SEQUENCES[variant], now);
       break;
     }
     case ReactionSound::Curious: {
       uint8_t variant = selectWeightedVariant(weightsFor(sound, mood), lastCuriousVariant);
+#if DESK_BUDDY_DIAGNOSTICS
+      recordSoundSelection(sound, mood, variant);
+#endif
       startSequence(SoundSequence::CuriousReaction,
                     CURIOUS_REACTION_SEQUENCES[variant], now);
       break;
     }
     case ReactionSound::Annoyed: {
       uint8_t variant = selectWeightedVariant(weightsFor(sound, mood), lastAnnoyedVariant);
+#if DESK_BUDDY_DIAGNOSTICS
+      recordSoundSelection(sound, mood, variant);
+#endif
       startSequence(SoundSequence::AnnoyedReaction,
                     ANNOYED_REACTION_SEQUENCES[variant], now);
       break;
@@ -329,6 +354,9 @@ void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood) {
     case ReactionSound::Startled: {
       uint8_t variant =
           selectWeightedVariant(weightsFor(sound, mood), lastStartledVariant);
+#if DESK_BUDDY_DIAGNOSTICS
+      recordSoundSelection(sound, mood, variant);
+#endif
       startSequence(SoundSequence::StartledReaction,
                     STARTLED_REACTION_SEQUENCES[variant], now);
       break;
@@ -336,6 +364,9 @@ void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood) {
     case ReactionSound::Suspicious: {
       uint8_t variant =
           selectWeightedVariant(weightsFor(sound, mood), lastSuspiciousVariant);
+#if DESK_BUDDY_DIAGNOSTICS
+      recordSoundSelection(sound, mood, variant);
+#endif
       startSequence(SoundSequence::SuspiciousReaction,
                     SUSPICIOUS_REACTION_SEQUENCES[variant], now);
       break;
@@ -343,6 +374,9 @@ void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood) {
     case ReactionSound::Confused: {
       uint8_t variant =
           selectWeightedVariant(weightsFor(sound, mood), lastConfusedVariant);
+#if DESK_BUDDY_DIAGNOSTICS
+      recordSoundSelection(sound, mood, variant);
+#endif
       startSequence(SoundSequence::ConfusedReaction,
                     CONFUSED_REACTION_SEQUENCES[variant], now);
       break;
@@ -351,6 +385,12 @@ void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood) {
 }
 
 #if DESK_BUDDY_DIAGNOSTICS
+DiagnosticSoundSelection getDiagnosticSoundSelection() { return lastSoundSelection; }
+DiagnosticSoundWeights getDiagnosticSoundWeights(ReactionSound sound, BuddyMood mood) {
+  const auto weights = weightsFor(sound, mood);
+  return {{weights.values[0], weights.values[1], weights.values[2]}};
+}
+
 bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,
                                   uint8_t requestedVariantIndex,
                                   uint8_t &selectedVariantIndex, BuddyMood mood) {
@@ -363,6 +403,7 @@ bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,
 
   switch (sound) {
     case ReactionSound::None:
+      clearSoundSelection();
       stopReactionSound();
       return true;
     case ReactionSound::Happy:
@@ -405,6 +446,7 @@ bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,
 
   if (requestedVariantIndex == DIAGNOSTIC_RANDOM_VARIANT) {
     selectedVariantIndex = selectWeightedVariant(weightsFor(sound, mood), *lastVariant);
+    recordSoundSelection(sound, mood, selectedVariantIndex);
   } else {
     if (requestedVariantIndex >= variantCount) return false;
     selectedVariantIndex = requestedVariantIndex;

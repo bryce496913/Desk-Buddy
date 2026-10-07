@@ -60,6 +60,11 @@ int main() {
           assert(draws == before + 1);
           const uint8_t selected = *family.previous;
           assert(selected < 3 && selected != previous);
+#if DESK_BUDDY_DIAGNOSTICS
+          const auto telemetry = getDiagnosticSoundSelection();
+          assert(telemetry.valid && telemetry.sound == family.sound && telemetry.mood == mood &&
+                 telemetry.variantIndex == selected);
+#endif
           ++counts[selected];
           // Nondecreasing ticket results plus exact counts prove every bucket boundary.
           assert(selected >= previousTicketResult);
