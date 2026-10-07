@@ -113,12 +113,12 @@ int main() {
     equalParams(exitFromLeft, early);
 
     reset(1000); command(text, 1000); frame(2000);
-    processBuddyEvent(BuddyEvent::ButtonPressed, 2001);
+    processBuddyEvent(BuddyEvent::ButtonShortPress, 2001);
     assert(getBuddyCoreState() == BuddyCoreState::Sleeping && getBuddyReaction() == BuddyReaction::Idle);
     assert(!reactionEntryTransitionActive && !reactionExitTransitionActive);
     assert(activeExpression == FaceExpression::Normal && !blinkActive && backlightTarget == 40);
     frame(2050); assert(renderedLeft.topLid > 0 && !renderedLeft.showSpark);
-    processBuddyEvent(BuddyEvent::ButtonPressed, 2100);
+    processBuddyEvent(BuddyEvent::ButtonShortPress, 2100);
     assert(getBuddyCoreState() == BuddyCoreState::Awake && blinkActive && blinkDuration == 260 && backlightTarget == 255);
   }
   // Direction bits remain independent even with interrupted Curious reactions.

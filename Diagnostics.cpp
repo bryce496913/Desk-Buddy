@@ -13,6 +13,7 @@ bool interactionSelectorPending = false;
 bool autonomousSelectorPending = false;
 bool timingSelectorPending = false;
 bool soundSelectorPending = false;
+bool quietSelectorPending = false;
 const char* const autonomousNames[] = {
     "Curious", "Daydreaming", "SideGlance", "Bored", "SuspiciousGlance",
     "AnnoyedSquint", "SleepyDrift", "ExcitedScanning"};
@@ -142,6 +143,7 @@ void printSoundWeights() {
 }
 
 void printDiagnosticHelp() {
+  Serial.println("q?: Sound mode (Normal/Quiet)");
   Serial.println("s?: Last random sound selection | sw: Current mood sound weights");
   Serial.println("Desk Buddy diagnostics");
   Serial.println();
@@ -200,6 +202,15 @@ void updateDiagnostics(uint32_t now) {
 
   const char command = static_cast<char>(Serial.read());
   if (command == '\r' || command == '\n' || command == ' ') return;
+
+  if (quietSelectorPending) {
+    quietSelectorPending = false;
+    if (command == '?') {
+      Serial.print("DIAG: Sound Mode = ");
+      Serial.println(getBuddySoundMode() == BuddySoundMode::Quiet ? "Quiet" : "Normal");
+    } else Serial.println("DIAG: Invalid quiet command (use q?)");
+    return;
+  }
 
   if (soundSelectorPending) {
     soundSelectorPending = false;
@@ -292,6 +303,10 @@ void updateDiagnostics(uint32_t now) {
   }
   if (command == 'a' || command == 'A') {
     autonomousSelectorPending = true;
+    return;
+  }
+  if (command == 'q' || command == 'Q') {
+    quietSelectorPending = true;
     return;
   }
   if (command == 's' || command == 'S') {

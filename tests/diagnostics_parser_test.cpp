@@ -302,6 +302,13 @@ int main() {
   assert(triggerCount == triggersBeforeRecovery + 1);
   assert(lastReaction == DiagnosticReaction::Startled);
   assert(lastVariant == DiagnosticSoundVariant::Variant1);
+  Serial.clearOutput(); sendCommand("q?");
+  assert(Serial.output == "DIAG: Sound Mode = Normal\n");
+  Serial.clearOutput(); Serial.push('q'); updateDiagnostics(300); updateDiagnostics(301);
+  assert(Serial.output.empty());
+  sendCommand("x"); assert(Serial.output == "DIAG: Invalid quiet command (use q?)\n");
+  Serial.clearOutput(); sendCommand("Q \n?");
+  assert(Serial.output == "DIAG: Sound Mode = Normal\n");
   return 0;
 }
 
@@ -309,3 +316,5 @@ DiagnosticSoundSelection getDiagnosticSoundSelection() {
   return {false, ReactionSound::None, BuddyMood::Calm, 0};
 }
 DiagnosticSoundWeights getDiagnosticSoundWeights(ReactionSound, BuddyMood) { return {{1, 1, 1}}; }
+
+BuddySoundMode getBuddySoundMode() { return BuddySoundMode::Normal; }

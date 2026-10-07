@@ -150,6 +150,7 @@ ReactionPlan selectSoundReaction(BuddyMood mood, uint8_t streak,
 BuddyCoreState coreState = BuddyCoreState::Awake;
 BuddyReaction activeReaction = BuddyReaction::Idle;
 BuddyMood currentMood = BuddyMood::Calm;
+BuddySoundMode soundMode = BuddySoundMode::Normal;
 uint8_t engagementScore = 0;
 uint8_t irritationScore = 0;
 uint32_t lastMoodDecayAt = 0;
@@ -430,6 +431,7 @@ void wakeBuddy(uint32_t now) {
 }  // namespace
 
 void beginBehaviorEngine(uint32_t now) {
+  soundMode = BuddySoundMode::Normal;
   clearRecentInteraction();
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
@@ -491,11 +493,19 @@ void updateBehaviorEngine(uint32_t now) {
 
 void processBuddyEvent(BuddyEvent event, uint32_t now) {
   switch (event) {
-    case BuddyEvent::ButtonPressed:
+    case BuddyEvent::ButtonShortPress:
       if (coreState == BuddyCoreState::Sleeping) {
         wakeBuddy(now);
       } else {
         enterSleep(now);
+      }
+      break;
+    case BuddyEvent::ButtonLongPress:
+      if (coreState == BuddyCoreState::Sleeping) {
+        wakeBuddy(now);
+      } else {
+        soundMode = soundMode == BuddySoundMode::Normal
+            ? BuddySoundMode::Quiet : BuddySoundMode::Normal;
       }
       break;
     case BuddyEvent::TouchTap:
@@ -683,3 +693,5 @@ bool triggerDiagnosticReaction(DiagnosticReaction reaction,
   return true;
 }
 #endif
+
+BuddySoundMode getBuddySoundMode() { return soundMode; }

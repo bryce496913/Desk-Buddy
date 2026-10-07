@@ -132,11 +132,11 @@ void testSleepWakeAndDecayReschedule() {
   for (BuddyMood mood : {BuddyMood::Calm, BuddyMood::Engaged, BuddyMood::Grumpy, BuddyMood::Sleepy}) {
     beginAt(100000);
     seedMood(mood, 100000);
-    processBuddyEvent(BuddyEvent::ButtonPressed, 100001);
+    processBuddyEvent(BuddyEvent::ButtonShortPress, 100001);
     assert(!autonomousBehaviorScheduled);
     updateBehaviorEngine(200000);
     assert(!autonomousBehaviorScheduled && coreState == BuddyCoreState::Sleeping);
-    processBuddyEvent(BuddyEvent::ButtonPressed, 200001);
+    processBuddyEvent(BuddyEvent::ButtonShortPress, 200001);
     assert(currentMood == (mood == BuddyMood::Sleepy ? BuddyMood::Calm : mood));
     expectScheduled(200001, mood == BuddyMood::Engaged ? 12000 : mood == BuddyMood::Grumpy ? 20000 : 28000);
   }
@@ -346,11 +346,11 @@ void testFrequencyOverlapAndAllInteractionResets() {
     assert(timingCalls == before + 1);
   }
   beginAt(0);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 1000);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 1000);
   const int beforeSleep = timingCalls;
   updateBehaviorEngine(300000);
   assert(!autonomousBehaviorScheduled && timingCalls == beforeSleep);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 300001);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 300001);
   assert(timingCalls == beforeSleep + 1);
   expectScheduled(300001, 45000);
   updateBehaviorEngine(300001);
@@ -405,6 +405,19 @@ void playWakeSound() {}
 void ignoreSoundSensorAfterWake() {}
 
 int main() {
+  beginAt(100);
+  const uint32_t modeDeadline = nextAutonomousBehaviorAt;
+  const bool modeScheduled = autonomousBehaviorScheduled;
+  const BuddyMood modeScheduleMood = autonomousScheduleMood;
+  const int modeTimingCalls = timingCalls;
+  const int modeBehaviorCalls = behaviorCalls;
+  processBuddyEvent(BuddyEvent::ButtonLongPress, 101);
+  assert(getBuddySoundMode() == BuddySoundMode::Quiet);
+  assert(nextAutonomousBehaviorAt == modeDeadline && autonomousBehaviorScheduled == modeScheduled &&
+         autonomousScheduleMood == modeScheduleMood && timingCalls == modeTimingCalls && behaviorCalls == modeBehaviorCalls);
+  processBuddyEvent(BuddyEvent::ButtonLongPress, 102);
+  assert(getBuddySoundMode() == BuddySoundMode::Normal && nextAutonomousBehaviorAt == modeDeadline);
+
   testRanges();
 #if !DESK_BUDDY_DIAGNOSTICS
   testStartupInteractionsAndCompletion();

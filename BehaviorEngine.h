@@ -9,10 +9,12 @@ enum class BuddyEvent : uint8_t {
   TouchTap,
   TouchHold,
   SoundDetected,
-  ButtonPressed,
+  ButtonShortPress,
+  ButtonLongPress,
   IdleTimeout
 };
 enum class BuddyReaction : uint8_t { Idle, Generic };
+enum class BuddySoundMode : uint8_t { Normal, Quiet };
 
 // Longer-lived disposition, independent of sleep state and transient reactions.
 enum class BuddyMood : uint8_t {
@@ -54,6 +56,7 @@ void processBuddyEvent(BuddyEvent event, uint32_t now);
 BuddyCoreState getBuddyCoreState();
 BuddyReaction getBuddyReaction();
 BuddyMood getBuddyMood();
+BuddySoundMode getBuddySoundMode();
 
 #if DESK_BUDDY_DIAGNOSTICS
 struct DiagnosticAutonomousTimingState {

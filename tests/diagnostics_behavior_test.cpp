@@ -177,7 +177,7 @@ int main() {
   updateBehaviorEngine(650);
   assert(faceReactionStarts == startsBeforeIdleUpdate);
 
-  processBuddyEvent(BuddyEvent::ButtonPressed, 700);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 700);
   assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
   assert(getBuddyMood() == BuddyMood::Grumpy);
   assert(!triggerDiagnosticReaction(DiagnosticReaction::Happy,
@@ -198,7 +198,7 @@ int main() {
   assert(soundReactionStops == stopsBeforeSleepingMood);
   assert(sleepFaceEntries == 1 && wakeFaceRequests == 0);
   assert(sleepSoundRequests == 1 && wakeSoundRequests == 0);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 702);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 702);
   assert(getBuddyCoreState() == BuddyCoreState::Awake);
   assert(getBuddyMood() == BuddyMood::Grumpy);
   beginBehaviorEngine(800);

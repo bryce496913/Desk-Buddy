@@ -192,7 +192,7 @@ void testHoldLeavesSoundHistoryAndDecayAlone() {
 void testSleepingIgnoresHold() {
   beginAt();
   buildGrumpy();
-  processBuddyEvent(BuddyEvent::ButtonPressed, 200);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 200);
   const int facesBefore = faceStarts;
   const int soundsBefore = soundStarts;
   processBuddyEvent(BuddyEvent::TouchHold, 300);
@@ -200,7 +200,7 @@ void testSleepingIgnoresHold() {
   assert(getBuddyReaction() == BuddyReaction::Idle);
   expectMood(300, BuddyMood::Grumpy, 60, 75, 0);
   assert(faceStarts == facesBefore && soundStarts == soundsBefore);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 400);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 400);
   assert(getBuddyCoreState() == BuddyCoreState::Awake);
   expectMood(400, BuddyMood::Grumpy, 60, 75, 0);
 }
@@ -291,12 +291,12 @@ void testSoundRestartsInactivity() {
 void testPhysicalSleepPausesScoresAndInactivity() {
   beginAt();
   buildGrumpy();
-  processBuddyEvent(BuddyEvent::ButtonPressed, 200);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 200);
   assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
   constexpr uint32_t wakeAt = 8 * 60 * 60 * 1000;
   updateBehaviorEngine(wakeAt - 1);
   expectMood(wakeAt - 1, BuddyMood::Grumpy, 60, 75, 0);
-  processBuddyEvent(BuddyEvent::ButtonPressed, wakeAt);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, wakeAt);
   updateBehaviorEngine(wakeAt);
   assert(getBuddyCoreState() == BuddyCoreState::Awake);
   expectMood(wakeAt, BuddyMood::Grumpy, 60, 75, 0);
@@ -458,7 +458,7 @@ void testAutonomousShowcaseIsolation() {
   const int facesBefore = faceStarts;
   assert(!triggerDiagnosticAutonomousBehavior(static_cast<DiagnosticAutonomousBehavior>(255), 204));
   assert(faceStarts == facesBefore);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 205);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 205);
   for (auto behavior : behaviors) assert(!triggerDiagnosticAutonomousBehavior(behavior, 206));
   assert(faceStarts == facesBefore);
 
@@ -545,14 +545,14 @@ void testRecentInteractionExclusionsAndSleep() {
       DiagnosticSoundVariant::Random, 1500, selected));
   expectRecent(1500, Type::TouchTap, 500, true);
 
-  processBuddyEvent(BuddyEvent::ButtonPressed, 1600);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 1600);
   expectRecent(1600, Type::None, 0, false);
   for (BuddyEvent event : {BuddyEvent::TouchTap, BuddyEvent::TouchHold,
                           BuddyEvent::SoundDetected, BuddyEvent::IdleTimeout}) {
     processBuddyEvent(event, 1601);
     expectRecent(1601, Type::None, 0, false);
   }
-  processBuddyEvent(BuddyEvent::ButtonPressed, 1602);  // Even very short sleep clears.
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 1602);  // Even very short sleep clears.
   expectRecent(1602, Type::None, 0, false);
   processBuddyEvent(BuddyEvent::SoundDetected, 1603);
   expectRecent(1603, Type::Sound, 0, true);
