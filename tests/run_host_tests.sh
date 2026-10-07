@@ -128,6 +128,11 @@ run_test "diagnostic production touch events" diagnostic_touch_events \
   "${REPO_ROOT}/tests/diagnostic_touch_events_test.cpp" \
   "${REPO_ROOT}/BehaviorEngine.cpp" "${REPO_ROOT}/Diagnostics.cpp"
 
+run_test "V2 diagnostics workflow" v2_diagnostics \
+  -DDESK_BUDDY_DIAGNOSTICS=1 \
+  "${REPO_ROOT}/tests/v2_diagnostics_test.cpp" \
+  "${REPO_ROOT}/BehaviorEngine.cpp" "${REPO_ROOT}/Diagnostics.cpp"
+
 # Link Diagnostics.cpp separately so missing direct includes fail as they do in Arduino.
 run_test "diagnostic Serial parser" diagnostics_parser \
   -DDESK_BUDDY_DIAGNOSTICS=1 \

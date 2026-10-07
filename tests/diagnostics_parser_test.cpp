@@ -342,6 +342,13 @@ int main() {
   Serial.clearOutput(); sendCommand("eh");
   assert(Serial.output == "DIAG: Event ignored while sleeping\n");
   assert(coreState == BuddyCoreState::Sleeping);
+  Serial.clearOutput(); Serial.push('d'); updateDiagnostics(300); updateDiagnostics(301);
+  assert(Serial.output.empty());
+  Serial.push('?'); updateDiagnostics(302);
+  assert(Serial.output.find("DIAG STATE\nCore = Sleeping\nReaction = Idle\n") == 0);
+  assert(lastTelemetryAt == 302 && interactionReadAt == 302 && timingReadAt == 302);
+  Serial.clearOutput(); sendCommand("dxd?");
+  assert(Serial.output.find("DIAG: Invalid state command (use d?)\nDIAG STATE\n") == 0);
   return 0;
 }
 
@@ -359,3 +366,5 @@ bool triggerDiagnosticAutonomousEvent(uint32_t, DiagnosticAutonomousBehavior& se
   selected = DiagnosticAutonomousBehavior::Bored;
   return true;
 }
+
+BuddyReaction getBuddyReaction() { return BuddyReaction::Idle; }

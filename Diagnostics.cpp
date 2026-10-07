@@ -15,6 +15,7 @@ bool timingSelectorPending = false;
 bool soundSelectorPending = false;
 bool quietSelectorPending = false;
 bool eventSelectorPending = false;
+bool stateSelectorPending = false;
 const char* const autonomousNames[] = {
     "Curious", "Daydreaming", "SideGlance", "Bored", "SuspiciousGlance",
     "AnnoyedSquint", "SleepyDrift", "ExcitedScanning"};
@@ -98,6 +99,38 @@ void printMoodTelemetry(uint32_t now) {
   Serial.println(" ms");
 }
 
+const char* coreStateName(BuddyCoreState state) {
+  return state == BuddyCoreState::Sleeping ? "Sleeping" : "Awake";
+}
+const char* reactionStateName(BuddyReaction reaction) {
+  return reaction == BuddyReaction::Generic ? "Generic" : "Idle";
+}
+void printStateSnapshot(uint32_t now) {
+  const auto mood = getDiagnosticMoodState(now);
+  const auto interaction = getDiagnosticRecentInteractionContext(now);
+  const auto autonomous = getDiagnosticAutonomousTimingState(now);
+  Serial.println("DIAG STATE");
+  Serial.print("Core = "); Serial.println(coreStateName(getBuddyCoreState()));
+  Serial.print("Reaction = "); Serial.println(reactionStateName(getBuddyReaction()));
+  Serial.print("Mood = "); Serial.println(moodName(mood.mood));
+  Serial.print("Engagement = "); Serial.println(static_cast<unsigned int>(mood.engagementScore));
+  Serial.print("Irritation = "); Serial.println(static_cast<unsigned int>(mood.irritationScore));
+  Serial.print("Inactive = "); Serial.print(mood.inactivityMs); Serial.println(" ms");
+  Serial.print("Sound Mode = "); Serial.println(getBuddySoundMode() == BuddySoundMode::Quiet ? "Quiet" : "Normal");
+  Serial.print("Interaction = "); Serial.print(interactionName(interaction.type));
+  Serial.print(" | Age = "); Serial.print(interaction.ageMs);
+  Serial.print(" ms | Recent = "); Serial.println(interaction.recent ? "Yes" : "No");
+  Serial.print("Autonomous = ");
+  Serial.print(autonomous.scheduled ? "Scheduled" : "Disabled in diagnostics");
+  Serial.print(" | Mood = "); Serial.print(moodName(autonomous.scheduleMood));
+  Serial.print(" | Range = "); Serial.print(autonomous.minMs);
+  Serial.print("-"); Serial.print(autonomous.maxMs); Serial.print(" ms");
+  if (autonomous.scheduled) {
+    Serial.print(" | Remaining = "); Serial.print(autonomous.remainingMs); Serial.print(" ms");
+  }
+  Serial.println();
+}
+
 const char* variantName(DiagnosticSoundVariant variant) {
   switch (variant) {
     case DiagnosticSoundVariant::Random: return "Random";
@@ -151,42 +184,30 @@ void printEventHelp() {
 }
 
 void printDiagnosticHelp() {
-  Serial.println("e?: Production event help | et: TouchTap | eh: TouchHold | ea: Production autonomy");
-  Serial.println("q?: Sound mode | qn: Normal | qq: Quiet");
-  Serial.println("s?: Last random sound selection | sw: Current mood sound weights");
-  Serial.println("Desk Buddy diagnostics");
-  Serial.println();
-  Serial.println("Reactions:");
-  Serial.println("1: Happy");
-  Serial.println("2: Curious");
-  Serial.println("3: Annoyed");
-  Serial.println("4: Startled");
-  Serial.println("5: Suspicious");
-  Serial.println("6: Confused");
-  Serial.println("7: Daydreaming");
-  Serial.println("0: Normal");
-  Serial.println();
-  Serial.println("Sound variant:");
-  Serial.println("v1: Variant 1");
-  Serial.println("v2: Variant 2");
-  Serial.println("v3: Variant 3");
-  Serial.println("vr: Random");
-  Serial.print("Sound variant mode: ");
-  Serial.println(variantName(soundVariant));
-  Serial.println();
-  Serial.println("?: Help");
-  Serial.println();
-  Serial.println("Mood:");
+  Serial.println("Desk Buddy V2 diagnostics");
+  Serial.println("V2 state:");
+  Serial.println("d?: State snapshot");
   Serial.println("m?: Current mood, scores, waking inactivity (0 while sleeping)");
-  Serial.println("mc: Calm");
-  Serial.println("me: Engaged");
-  Serial.println("mg: Grumpy");
-  Serial.println("ms: Sleepy");
-  Serial.println();
+  Serial.println("mc: Calm | me: Engaged | mg: Grumpy | ms: Sleepy");
   Serial.println("i?: Recent interaction type, age, and validity");
   Serial.println("t?: Autonomous timing (background scheduling disabled in diagnostics)");
+  Serial.println("q?: Sound mode | qn: Normal | qq: Quiet");
   Serial.println();
+  Serial.println("Production event simulation:");
+  printEventHelp();
+  Serial.println();
+  Serial.println("Autonomous showcase (isolated from interaction/selection history):");
   printAutonomousHelp();
+  Serial.println();
+  Serial.println("Reaction showcase (does not record interactions; auditions bypass Quiet):");
+  Serial.println("1: Happy | 2: Curious | 3: Annoyed | 4: Startled");
+  Serial.println("5: Suspicious | 6: Confused | 7: Daydreaming | 0: Normal");
+  Serial.println();
+  Serial.println("Sound diagnostics:");
+  Serial.println("s?: Last random sound selection | sw: Current mood sound weights");
+  Serial.println("v1: Variant 1 | v2: Variant 2 | v3: Variant 3 | vr: Random");
+  Serial.print("Sound variant mode: "); Serial.println(variantName(soundVariant));
+  Serial.println("?: Help");
 }
 
 const char* reactionName(DiagnosticReaction reaction) {
@@ -211,6 +232,13 @@ void updateDiagnostics(uint32_t now) {
 
   const char command = static_cast<char>(Serial.read());
   if (command == '\r' || command == '\n' || command == ' ') return;
+
+  if (stateSelectorPending) {
+    stateSelectorPending = false;
+    if (command == '?') printStateSnapshot(now);
+    else Serial.println("DIAG: Invalid state command (use d?)");
+    return;
+  }
 
   if (eventSelectorPending) {
     eventSelectorPending = false;
@@ -343,6 +371,10 @@ void updateDiagnostics(uint32_t now) {
   }
   if (command == 'a' || command == 'A') {
     autonomousSelectorPending = true;
+    return;
+  }
+  if (command == 'd' || command == 'D') {
+    stateSelectorPending = true;
     return;
   }
   if (command == 'e' || command == 'E') {
