@@ -59,6 +59,9 @@ uint32_t nextDrowsyAt = 0;
 uint32_t reactUntil = 0;
 uint32_t reactionStartedAt = 0;
 constexpr uint32_t REACTION_DURATION_MS = 1800;
+constexpr uint32_t REACTION_ENTER_TRANSITION_MS = 180;
+bool reactionEntryTransitionActive = false;
+uint32_t reactionEntryStartedAt = 0;
 bool sideGlanceRight = false;
 FaceExpression activeExpression = FaceExpression::Normal;
 uint32_t lastFrameAt = 0;
@@ -106,6 +109,9 @@ struct EyeExpressionParams {
   bool reactiveIris;
   bool showSpark;
 };
+EyeExpressionParams entryFromLeft{}, entryFromRight{};
+EyeExpressionParams renderedLeft{}, renderedRight{};
+bool hasRenderedEyes = false;
 
 // Foundation only: these helpers are not applied to rendered transitions yet.
 [[maybe_unused]] float smoothstep01(float t) {
@@ -190,6 +196,23 @@ EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye,
   }
 }
 
+EyeExpressionParams visualExpressionParams(uint32_t now, BuddyReaction reaction,
+                                          bool isLeftEye) {
+  EyeExpressionParams target = expressionParams(
+      reaction == BuddyReaction::Generic ? activeExpression : FaceExpression::Normal,
+      isLeftEye, now);
+  if (reaction == BuddyReaction::Generic && reactionEntryTransitionActive) {
+    const float progress = smoothstep01(float(static_cast<uint32_t>(now - reactionEntryStartedAt)) /
+                                       REACTION_ENTER_TRANSITION_MS);
+    return interpolateExpressionParams(isLeftEye ? entryFromLeft : entryFromRight, target, progress);
+  }
+  if (reaction != BuddyReaction::Generic) {
+    target.pupilBiasX = int(clampf(pupilX + target.pupilBiasX, -17, 17));
+    target.pupilBiasY = int(clampf(pupilY + target.pupilBiasY, -24, 24));
+  }
+  return target;
+}
+
 void drawEye(GFXcanvas16 &target, int cx, int cy, int w, int h,
              const EyeExpressionParams &params) {
   int x = cx - (w / 2);
@@ -203,8 +226,8 @@ void drawEye(GFXcanvas16 &target, int cx, int cy, int w, int h,
   target.drawRoundRect(x, y, w, h, eyeCorner, COL_EYE_LINE);
   int pupilRangeX = (w / 2) - 22;
   int pupilRangeY = (h / 2) - 24;
-  int px = cx + int(clampf(pupilX + params.pupilBiasX, -pupilRangeX, pupilRangeX));
-  int py = cy + int(clampf(pupilY + params.pupilBiasY, -pupilRangeY, pupilRangeY));
+  int px = cx + int(clampf(params.pupilBiasX, -pupilRangeX, pupilRangeX));
+  int py = cy + int(clampf(params.pupilBiasY, -pupilRangeY, pupilRangeY));
   uint16_t irisColor = params.reactiveIris ? COL_IRIS_REACT : COL_IRIS;
   target.fillCircle(px, py, params.irisRadius, irisColor);
   target.fillCircle(px, py, params.pupilRadius, COL_PUPIL);
@@ -224,9 +247,8 @@ void drawEye(GFXcanvas16 &target, int cx, int cy, int w, int h,
   }
 }
 void renderEyeRegion(int screenCenterX, int screenCenterY, int sparkCenterX,
-                     FaceExpression expression, bool isLeftEye, uint32_t now) {
+                     const EyeExpressionParams &params) {
   int screenX = screenCenterX - (EYE_REGION_W / 2);
-  EyeExpressionParams params = expressionParams(expression, isLeftEye, now);
   fillBackgroundRegion(eyeCanvas, EYE_REGION_Y, EYE_REGION_W, EYE_REGION_H);
   drawEye(eyeCanvas, EYE_REGION_W / 2, screenCenterY - EYE_REGION_Y,
           eyeW, eyeH, params);
@@ -251,10 +273,11 @@ void renderFrame(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction)
   int bobY = coreState == BuddyCoreState::Sleeping
       ? int(sinf(now * 0.0022f) * 3.0f) : int(sinf(now * 0.0045f) * 1.5f);
   int y = eyeY + bobY;
-  FaceExpression expression = reaction == BuddyReaction::Generic
-      ? activeExpression : FaceExpression::Normal;
-  renderEyeRegion(leftEyeX, y, leftEyeX - 34, expression, true, now);
-  renderEyeRegion(rightEyeX, y, rightEyeX + 34, expression, false, now);
+  renderedLeft = visualExpressionParams(now, reaction, true);
+  renderedRight = visualExpressionParams(now, reaction, false);
+  hasRenderedEyes = true;
+  renderEyeRegion(leftEyeX, y, leftEyeX - 34, renderedLeft);
+  renderEyeRegion(rightEyeX, y, rightEyeX + 34, renderedRight);
   renderSleepZ(now, coreState);
 }
 void updateBacklight() {
@@ -283,26 +306,36 @@ void scheduleFaceBehavior(uint32_t now) {
   scheduleNextBlink(now); scheduleNextLook(now); scheduleNextDrowsy(now);
 }
 void startFaceReaction(uint32_t now, FaceExpression expression) {
+  entryFromLeft = hasRenderedEyes ? renderedLeft : visualExpressionParams(now, BuddyReaction::Idle, true);
+  entryFromRight = hasRenderedEyes ? renderedRight : visualExpressionParams(now, BuddyReaction::Idle, false);
+  reactionEntryStartedAt = now;
+  reactionEntryTransitionActive = true;
   reactionStartedAt = now;
   reactUntil = now + REACTION_DURATION_MS;
   if (expression == FaceExpression::SideGlance) sideGlanceRight = !sideGlanceRight;
   activeExpression = expression;
+  // Apparent ambient pupil position is frozen in the source snapshots.
+  pupilX = 0;
+  pupilY = 0;
   pupilTargetX = 0;
   pupilTargetY = 0;
   drowsyUntil = 0;
 }
 bool isFaceReactionFinished(uint32_t now) { return timeReached(now, reactUntil); }
 void finishFaceReaction(uint32_t now) {
+  reactionEntryTransitionActive = false;
   activeExpression = FaceExpression::Normal;
   scheduleFaceBehavior(now);
 }
 void enterSleepFace(uint32_t) {
+  reactionEntryTransitionActive = false;
   backlightTarget = 40;
   blinkActive = false;
   reactUntil = 0;
   activeExpression = FaceExpression::Normal;
 }
 void wakeFace(uint32_t now) {
+  reactionEntryTransitionActive = false;
   backlightTarget = 255;
   blinkActive = true;
   blinkStart = now;
@@ -311,6 +344,10 @@ void wakeFace(uint32_t now) {
   scheduleFaceBehavior(now);
 }
 void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction) {
+  if (reactionEntryTransitionActive &&
+      static_cast<uint32_t>(now - reactionEntryStartedAt) >= REACTION_ENTER_TRANSITION_MS) {
+    reactionEntryTransitionActive = false;
+  }
   if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
       !blinkActive && timeReached(now, nextBlinkAt)) {
     blinkActive = true;
