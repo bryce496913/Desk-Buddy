@@ -1,6 +1,7 @@
 #include "FaceRenderer.h"
 
 #include <Arduino.h>
+#include <math.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
@@ -105,6 +106,32 @@ struct EyeExpressionParams {
   bool reactiveIris;
   bool showSpark;
 };
+
+// Foundation only: these helpers are not applied to rendered transitions yet.
+[[maybe_unused]] float smoothstep01(float t) {
+  t = clampf(t, 0.0f, 1.0f);
+  return t * t * (3.0f - 2.0f * t);
+}
+
+[[maybe_unused]] EyeExpressionParams interpolateExpressionParams(
+    const EyeExpressionParams &from, const EyeExpressionParams &to, float progress) {
+  progress = clampf(progress, 0.0f, 1.0f);
+  EyeExpressionParams result = progress < 0.5f ? from : to;
+  // Copy endpoints exactly; interpolate only intermediate numeric snapshots.
+  if (progress > 0.0f && progress < 1.0f) {
+    result.topLid = lerpf(from.topLid, to.topLid, progress);
+    result.bottomLid = lerpf(from.bottomLid, to.bottomLid, progress);
+    result.irisRadius = static_cast<int>(lroundf(lerpf(float(from.irisRadius), float(to.irisRadius), progress)));
+    result.pupilRadius = static_cast<int>(lroundf(lerpf(float(from.pupilRadius), float(to.pupilRadius), progress)));
+    result.pupilBiasX = static_cast<int>(lroundf(lerpf(float(from.pupilBiasX), float(to.pupilBiasX), progress)));
+    result.pupilBiasY = static_cast<int>(lroundf(lerpf(float(from.pupilBiasY), float(to.pupilBiasY), progress)));
+  }
+  result.topLid = clampf(result.topLid, 0.0f, 1.0f);
+  result.bottomLid = clampf(result.bottomLid, 0.0f, 1.0f);
+  if (result.irisRadius < 1) result.irisRadius = 1;
+  if (result.pupilRadius < 1) result.pupilRadius = 1;
+  return result;
+}
 
 EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye,
                                     uint32_t now) {
