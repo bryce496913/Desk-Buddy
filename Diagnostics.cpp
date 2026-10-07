@@ -143,7 +143,7 @@ void printSoundWeights() {
 }
 
 void printDiagnosticHelp() {
-  Serial.println("q?: Sound mode (Normal/Quiet)");
+  Serial.println("q?: Sound mode | qn: Normal | qq: Quiet");
   Serial.println("s?: Last random sound selection | sw: Current mood sound weights");
   Serial.println("Desk Buddy diagnostics");
   Serial.println();
@@ -205,10 +205,12 @@ void updateDiagnostics(uint32_t now) {
 
   if (quietSelectorPending) {
     quietSelectorPending = false;
-    if (command == '?') {
+    if (command == '?' || command == 'n' || command == 'N' || command == 'q' || command == 'Q') {
+      if (command == 'n' || command == 'N') setDiagnosticSoundMode(BuddySoundMode::Normal);
+      if (command == 'q' || command == 'Q') setDiagnosticSoundMode(BuddySoundMode::Quiet);
       Serial.print("DIAG: Sound Mode = ");
       Serial.println(getBuddySoundMode() == BuddySoundMode::Quiet ? "Quiet" : "Normal");
-    } else Serial.println("DIAG: Invalid quiet command (use q?)");
+    } else Serial.println("DIAG: Invalid quiet command (use q?, qn or qq)");
     return;
   }
 

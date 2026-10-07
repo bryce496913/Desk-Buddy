@@ -342,12 +342,17 @@ void resetSoundHistory() {
   soundStreak = 0;
 }
 
+void setSoundMode(BuddySoundMode mode) {
+  if (soundMode != mode && mode == BuddySoundMode::Quiet) stopReactionSound();
+  soundMode = mode;
+}
+
 void startGenericReaction(uint32_t now, FaceExpression expression,
                           ReactionSound sound, BuddyMood reactionMood) {
   stopReactionSound();
   activeReaction = BuddyReaction::Generic;
   startFaceReaction(now, expression);
-  startReactionSound(now, sound, reactionMood);
+  if (soundMode == BuddySoundMode::Normal) startReactionSound(now, sound, reactionMood);
 }
 
 void handleTapInteraction(uint32_t now) {
@@ -504,8 +509,8 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
       if (coreState == BuddyCoreState::Sleeping) {
         wakeBuddy(now);
       } else {
-        soundMode = soundMode == BuddySoundMode::Normal
-            ? BuddySoundMode::Quiet : BuddySoundMode::Normal;
+        setSoundMode(soundMode == BuddySoundMode::Normal
+            ? BuddySoundMode::Quiet : BuddySoundMode::Normal);
       }
       break;
     case BuddyEvent::TouchTap:
@@ -619,6 +624,8 @@ DiagnosticMoodState getDiagnosticMoodState(uint32_t now) {
               ? static_cast<uint32_t>(now - lastMeaningfulActivityAt)
               : 0};
 }
+
+void setDiagnosticSoundMode(BuddySoundMode mode) { setSoundMode(mode); }
 
 void setDiagnosticMood(BuddyMood mood, uint32_t now) {
   lastMoodDecayAt = now;
