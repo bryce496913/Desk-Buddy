@@ -56,6 +56,15 @@ BuddyReaction getBuddyReaction();
 BuddyMood getBuddyMood();
 
 #if DESK_BUDDY_DIAGNOSTICS
+struct DiagnosticAutonomousTimingState {
+  bool scheduled;
+  BuddyMood scheduleMood;
+  uint32_t remainingMs;
+  uint32_t minMs;
+  uint32_t maxMs;
+};
+DiagnosticAutonomousTimingState getDiagnosticAutonomousTimingState(uint32_t now);
+
 enum class DiagnosticRecentInteractionType : uint8_t {
   None, TouchTap, TouchHold, Sound
 };

@@ -553,6 +553,15 @@ BuddyReaction getBuddyReaction() { return activeReaction; }
 BuddyMood getBuddyMood() { return currentMood; }
 
 #if DESK_BUDDY_DIAGNOSTICS
+DiagnosticAutonomousTimingState getDiagnosticAutonomousTimingState(uint32_t now) {
+  const BuddyMood mood = autonomousBehaviorScheduled ? autonomousScheduleMood : currentMood;
+  const AutonomousTimingRange range = autonomousTimingFor(mood);
+  const uint32_t remaining = autonomousBehaviorScheduled &&
+      !timeReached(now, nextAutonomousBehaviorAt)
+      ? static_cast<uint32_t>(nextAutonomousBehaviorAt - now) : 0;
+  return {autonomousBehaviorScheduled, mood, remaining, range.minMs, range.maxMs};
+}
+
 bool triggerDiagnosticAutonomousBehavior(DiagnosticAutonomousBehavior requested,
                                          uint32_t now) {
   if (coreState != BuddyCoreState::Awake) return false;

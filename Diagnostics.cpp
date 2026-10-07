@@ -11,6 +11,7 @@ bool variantSelectorPending = false;
 bool moodSelectorPending = false;
 bool interactionSelectorPending = false;
 bool autonomousSelectorPending = false;
+bool timingSelectorPending = false;
 const char* const autonomousNames[] = {
     "Curious", "Daydreaming", "SideGlance", "Bored", "SuspiciousGlance",
     "AnnoyedSquint", "SleepyDrift", "ExcitedScanning"};
@@ -62,6 +63,23 @@ const char* moodName(BuddyMood mood) {
 void printCurrentMood() {
   Serial.print("DIAG: Mood = ");
   Serial.println(moodName(getBuddyMood()));
+}
+
+void printTimingTelemetry(uint32_t now) {
+  const auto state = getDiagnosticAutonomousTimingState(now);
+  if (!state.scheduled) {
+    Serial.println("DIAG: Autonomous scheduling disabled in diagnostics");
+    return;
+  }
+  Serial.print("DIAG: Autonomous = Scheduled | Mood = ");
+  Serial.print(moodName(state.scheduleMood));
+  Serial.print(" | Remaining = ");
+  Serial.print(state.remainingMs);
+  Serial.print(" ms | Range = ");
+  Serial.print(state.minMs);
+  Serial.print("-");
+  Serial.print(state.maxMs);
+  Serial.println(" ms");
 }
 
 void printMoodTelemetry(uint32_t now) {
@@ -118,6 +136,7 @@ void printDiagnosticHelp() {
   Serial.println("ms: Sleepy");
   Serial.println();
   Serial.println("i?: Recent interaction type, age, and validity");
+  Serial.println("t?: Autonomous timing (background scheduling disabled in diagnostics)");
   Serial.println();
   printAutonomousHelp();
 }
@@ -144,6 +163,13 @@ void updateDiagnostics(uint32_t now) {
 
   const char command = static_cast<char>(Serial.read());
   if (command == '\r' || command == '\n' || command == ' ') return;
+
+  if (timingSelectorPending) {
+    timingSelectorPending = false;
+    if (command == '?') printTimingTelemetry(now);
+    else Serial.println("DIAG: Invalid timing command (use t?)");
+    return;
+  }
 
   if (autonomousSelectorPending) {
     autonomousSelectorPending = false;
@@ -221,6 +247,10 @@ void updateDiagnostics(uint32_t now) {
   }
   if (command == 'a' || command == 'A') {
     autonomousSelectorPending = true;
+    return;
+  }
+  if (command == 't' || command == 'T') {
+    timingSelectorPending = true;
     return;
   }
   if (command == '?') {

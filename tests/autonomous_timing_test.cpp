@@ -11,6 +11,7 @@ TimingTicket timingTicket = TimingTicket::Minimum;
 long observedMin = 0;
 long observedExclusiveMax = 0;
 int timingCalls = 0;
+int behaviorCalls = 0;
 FaceExpression expression = FaceExpression::Normal;
 ReactionSound sound = ReactionSound::None;
 bool faceFinished = false;
@@ -271,10 +272,94 @@ void testActiveReactionDefersTransitionSchedule() {
   expectScheduled(20001, 45000);
   assert(timingCalls == beforeDeferred + 1);
 }
+
+void testLongLifecycleAndRandomIsolation() {
+  timingTicket = TimingTicket::Minimum;
+  beginAt(0);
+  bool sawCalm = false, sawEngaged = false, sawSleepy = false;
+  for (uint32_t now = 1000; now <= 300000; now += 1000) {
+    if (now == 30000) {
+      processBuddyEvent(BuddyEvent::TouchTap, now);
+      processBuddyEvent(BuddyEvent::TouchHold, now + 1);
+      assert(currentMood == BuddyMood::Engaged);
+      expectScheduled(now + 1, 12000);
+    }
+    faceFinished = activeReaction == BuddyReaction::Generic;
+    soundActive = false;
+    const int before = timingCalls;
+    updateBehaviorEngine(now);
+    if (timingCalls != before) {
+      assert(timingCalls == before + 1);
+      assert(autonomousScheduleMood == currentMood);
+      const auto range = autonomousTimingFor(currentMood);
+      expectScheduled(now, range.minMs);
+      sawCalm |= currentMood == BuddyMood::Calm;
+      sawEngaged |= currentMood == BuddyMood::Engaged;
+      sawSleepy |= currentMood == BuddyMood::Sleepy;
+    }
+    const int timingBeforeIdleUpdate = timingCalls;
+    const int behaviorBeforeIdleUpdate = behaviorCalls;
+    updateBehaviorEngine(now);  // No event, completion, or transition on repeated update.
+    assert(timingCalls == timingBeforeIdleUpdate);
+    assert(behaviorCalls == behaviorBeforeIdleUpdate);
+  }
+  assert(sawCalm && sawEngaged && sawSleepy);
+  assert(currentMood == BuddyMood::Sleepy);
+
+  beginAt(0);
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
+  faceFinished = true;
+  soundActive = false;
+  updateBehaviorEngine(101);
+  engagementScore = 40;
+  currentMood = BuddyMood::Engaged;
+  scheduleNextAutonomousBehavior(101);
+  const auto typeBefore = lastInteractionType;
+  const uint32_t atBefore = lastInteractionAt;
+  const int drawsBefore = behaviorCalls;
+  updateBehaviorEngine(10000);  // Decay crosses Calm, timing draw only.
+  assert(currentMood == BuddyMood::Calm);
+  assert(lastInteractionType == typeBefore && lastInteractionAt == atBefore && hasLastInteraction);
+  assert(behaviorCalls == drawsBefore);
+}
+
+void testFrequencyOverlapAndAllInteractionResets() {
+  const auto engaged = autonomousTimingFor(BuddyMood::Engaged);
+  const auto grumpy = autonomousTimingFor(BuddyMood::Grumpy);
+  const auto calm = autonomousTimingFor(BuddyMood::Calm);
+  const auto sleepy = autonomousTimingFor(BuddyMood::Sleepy);
+  assert(engaged.minMs < grumpy.minMs && grumpy.minMs < calm.minMs && calm.minMs < sleepy.minMs);
+  assert(engaged.maxMs < grumpy.maxMs && grumpy.maxMs < calm.maxMs && calm.maxMs < sleepy.maxMs);
+  assert(grumpy.minMs <= 30000 && grumpy.maxMs >= 30000);
+  assert(calm.minMs <= 30000 && calm.maxMs >= 30000);
+  assert(calm.maxMs == sleepy.minMs);  // Intentional shared 45-second boundary.
+  timingTicket = TimingTicket::Maximum;
+  for (BuddyEvent event : {BuddyEvent::TouchTap, BuddyEvent::TouchHold, BuddyEvent::SoundDetected}) {
+    beginAt(0);
+    const uint32_t oldDeadline = nextAutonomousBehaviorAt;
+    const int before = timingCalls;
+    processBuddyEvent(event, 1000);
+    assert(nextAutonomousBehaviorAt != oldDeadline);
+    assert(autonomousScheduleMood == currentMood && timingCalls == before + 1);
+    expectScheduled(1000, autonomousTimingFor(currentMood).maxMs);
+    updateBehaviorEngine(1000);
+    assert(timingCalls == before + 1);
+  }
+  beginAt(0);
+  processBuddyEvent(BuddyEvent::ButtonPressed, 1000);
+  const int beforeSleep = timingCalls;
+  updateBehaviorEngine(300000);
+  assert(!autonomousBehaviorScheduled && timingCalls == beforeSleep);
+  processBuddyEvent(BuddyEvent::ButtonPressed, 300001);
+  assert(timingCalls == beforeSleep + 1);
+  expectScheduled(300001, 45000);
+  updateBehaviorEngine(300001);
+  assert(timingCalls == beforeSleep + 1 && activeReaction == BuddyReaction::Idle);
+}
 #endif
 }  // namespace
 
-long random(long) { return 0; }
+long random(long) { ++behaviorCalls; return 0; }
 long random(long minimum, long exclusiveMaximum) {
   assert(minimum < exclusiveMaximum);
   observedMin = minimum;
@@ -327,6 +412,8 @@ int main() {
   testRolloverDeadlines();
   testMoodTransitionReschedulingAndRandomCalls();
   testActiveReactionDefersTransitionSchedule();
+  testLongLifecycleAndRandomIsolation();
+  testFrequencyOverlapAndAllInteractionResets();
 #else
   beginAt(0);
   const int beforeDiagnostic = timingCalls;
@@ -334,6 +421,19 @@ int main() {
     setDiagnosticMood(mood, 100);
     updateBehaviorEngine(200);
     assert(!autonomousBehaviorScheduled && timingCalls == beforeDiagnostic);
+    const auto state = getDiagnosticAutonomousTimingState(200);
+    assert(!state.scheduled && state.remainingMs == 0);
   }
+  // Inspect a synthetic pending schedule only through the real read-only getter.
+  constexpr uint32_t anchor = std::numeric_limits<uint32_t>::max() - 500;
+  autonomousBehaviorScheduled = true;
+  autonomousScheduleMood = BuddyMood::Engaged;
+  nextAutonomousBehaviorAt = anchor + uint32_t{12000};
+  const auto state = getDiagnosticAutonomousTimingState(anchor + uint32_t{1000});
+  assert(state.scheduled && state.scheduleMood == BuddyMood::Engaged && state.remainingMs == 11000);
+  assert(state.minMs == 12000 && state.maxMs == 24000);
+  assert(getDiagnosticAutonomousTimingState(nextAutonomousBehaviorAt).remainingMs == 0);
+  assert(getDiagnosticAutonomousTimingState(nextAutonomousBehaviorAt + 1).remainingMs == 0);
+  assert(nextAutonomousBehaviorAt == anchor + uint32_t{12000} && timingCalls == beforeDiagnostic);
 #endif
 }

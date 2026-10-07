@@ -215,6 +215,10 @@ void testTelemetryIsReadOnly() {
   const auto before = getDiagnosticMoodState(1001);
   const int facesBefore = faceStarts;
   const int soundsBefore = soundStarts;
+  command("t?", 2251);
+  assert(Serial.output == "DIAG: Autonomous scheduling disabled in diagnostics\n");
+  memory(2251, Type::Sound, 1250);
+  Serial.clearOutput();
   command("i?", 2251);
   assert(Serial.output == "DIAG: Interaction = Sound | Age = 1250 ms | Recent = Yes\n");
   Serial.clearOutput();

@@ -24,6 +24,9 @@ uint32_t interactionReadAt = 0;
 BuddyCoreState coreState = BuddyCoreState::Awake;
 DiagnosticAutonomousBehavior lastAutonomous = DiagnosticAutonomousBehavior::Curious;
 int autonomousTriggerCount = 0;
+DiagnosticAutonomousTimingState timing = {false, BuddyMood::Calm, 0, 28000, 45000};
+int timingReadCount = 0;
+uint32_t timingReadAt = 0;
 
 void sendCommand(const char* command) {
   for (const char* cursor = command; *cursor; ++cursor) {
@@ -34,6 +37,11 @@ void sendCommand(const char* command) {
 }
 
 BuddyCoreState getBuddyCoreState() { return coreState; }
+DiagnosticAutonomousTimingState getDiagnosticAutonomousTimingState(uint32_t now) {
+  ++timingReadCount;
+  timingReadAt = now;
+  return timing;
+}
 bool triggerDiagnosticAutonomousBehavior(DiagnosticAutonomousBehavior behavior,
                                          uint32_t) {
   if (coreState == BuddyCoreState::Sleeping) return false;
@@ -218,6 +226,24 @@ int main() {
   assert(Serial.output.find("Invalid autonomous command") != std::string::npos);
   sendCommand("A3v14");
   assert(autonomousTriggerCount == 9);
+  Serial.clearOutput();
+  sendCommand("t?");
+  assert(Serial.output == "DIAG: Autonomous scheduling disabled in diagnostics\n");
+  assert(timingReadAt == 200);
+  const int beforeTiming = timingReadCount;
+  Serial.clearOutput();
+  Serial.push('t');
+  updateDiagnostics(300);
+  updateDiagnostics(301);
+  assert(Serial.output.empty() && timingReadCount == beforeTiming);
+  Serial.push('x');
+  updateDiagnostics(302);
+  assert(Serial.output == "DIAG: Invalid timing command (use t?)\n");
+  timing = {true, BuddyMood::Engaged, 17420, 12000, 24000};
+  Serial.clearOutput();
+  sendCommand("T?");
+  assert(Serial.output == "DIAG: Autonomous = Scheduled | Mood = Engaged | Remaining = 17420 ms | Range = 12000-24000 ms\n");
+  sendCommand("txm?i?a?");  // Invalid timing selector does not poison other parsers.
   assert(lastAutonomous == DiagnosticAutonomousBehavior::SideGlance);
   assert(lastReaction == DiagnosticReaction::Startled);
   coreState = BuddyCoreState::Sleeping;
