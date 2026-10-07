@@ -22,7 +22,7 @@ void beginAt(uint32_t now = 0, bool touched = false, bool buttonPressed = false)
 }
 
 void expect(uint32_t now, TouchGesture gesture = TouchGesture::None,
-            bool button = false) {
+            ButtonGesture button = ButtonGesture::None) {
   clockNow = now;
   const InputEvents events = updateInputs(now);
   assert(events.touch == gesture);
@@ -139,52 +139,92 @@ void testRollover() {
   release(crossedPress + 699, TouchGesture::Tap);
 }
 
+uint32_t pressButton(uint32_t rawAt) {
+  buttonHigh = false;
+  expect(rawAt);
+  expect(rawAt + 25);
+  expect(rawAt + 26);
+  return rawAt + 26;
+}
+void releaseButton(uint32_t rawAt, ButtonGesture gesture) {
+  buttonHigh = true;
+  expect(rawAt);
+  expect(rawAt + 25);
+  expect(rawAt + 26, TouchGesture::None, gesture);
+  expect(rawAt + 100);
+}
 void testButton() {
+  for (uint32_t anchor : {0u, std::numeric_limits<uint32_t>::max() - 400}) {
+    for (uint32_t duration : {200u, 990u, 999u, 1000u, 1100u}) {
+      beginAt(anchor);
+      const uint32_t pressedAt = pressButton(anchor + 100);
+      expect(pressedAt + 900 * (duration > 900));
+      // First release observation may itself be after the threshold (sparse loop).
+      releaseButton(pressedAt + duration, duration < 1000
+          ? ButtonGesture::ShortPress : ButtonGesture::LongPress);
+    }
+    beginAt(anchor);
+    const uint32_t pressedAt = pressButton(anchor + 100);
+    expect(pressedAt + 999);
+    expect(pressedAt + 1000, TouchGesture::None, ButtonGesture::LongPress);
+    for (uint32_t elapsed = 1001; elapsed <= 5000; elapsed += 17)
+      expect(pressedAt + elapsed);
+    releaseButton(pressedAt + 5001, ButtonGesture::None);
+    const uint32_t freshPress = pressButton(pressedAt + 6000);
+    releaseButton(freshPress + 100, ButtonGesture::ShortPress);
+
+    beginAt(anchor);
+    const uint32_t sparsePress = pressButton(anchor + 100);
+    expect(sparsePress + 900);
+    expect(sparsePress + 1100, TouchGesture::None, ButtonGesture::LongPress);
+    releaseButton(sparsePress + 1200, ButtonGesture::None);
+  }
+  // Raw glitches and noisy press edges never synthesize gestures.
+  beginAt(); buttonHigh = false; expect(10);
+  buttonHigh = true; expect(20); expect(100);
+  buttonHigh = false; expect(200);
+  buttonHigh = true; expect(210);
+  buttonHigh = false; expect(220); expect(245); expect(246);
+  expect(1220); // Not long based on the first raw edge at 200.
+  buttonHigh = true; expect(1236); expect(1251);
+  buttonHigh = false; expect(1252, TouchGesture::None, ButtonGesture::LongPress);
+  buttonHigh = true; expect(1260);
+  buttonHigh = false; expect(1270); // Further release bounce cannot emit again.
+  releaseButton(1300, ButtonGesture::None);
+  beginAt(); const uint32_t shortPress = pressButton(100);
+  buttonHigh = true; expect(shortPress + 50);
+  buttonHigh = false; expect(shortPress + 60);
+  releaseButton(shortPress + 200, ButtonGesture::ShortPress);
+
+  beginAt(0, false, true); expect(5000);
+  releaseButton(5100, ButtonGesture::None);
+  const uint32_t newPress = pressButton(5300);
+  releaseButton(newPress + 999, ButtonGesture::ShortPress);
+  pressButton(6500);
+  beginAt(6600, false, true); expect(9000); // Reinitialization also discards an active gesture.
+  releaseButton(9100, ButtonGesture::None);
+
+  // Both classifiers can emit in one update without sharing state or thresholds.
   beginAt();
-  buttonHigh = false;
-  expect(10);
-  buttonHigh = true;
-  expect(20);  // Short active-LOW glitch.
-  expect(100);
-  buttonHigh = false;
-  expect(200);
-  expect(225);
-  expect(226, TouchGesture::None, true);
-  expect(1000);  // Held button does not repeat.
-  buttonHigh = true;
-  expect(1100);
-  buttonHigh = false;
-  expect(1110);  // Release bounce does not create another press.
-  expect(1200);
-  buttonHigh = true;
-  expect(1300);
-  expect(1326);
-  buttonHigh = false;
-  expect(1400);
-  expect(1426, TouchGesture::None, true);
-
-  beginAt(0, false, true);
-  expect(1000);  // Boot LOW does not synthesize a button event.
-  buttonHigh = true;
-  expect(1100);
-  expect(1126);
-  buttonHigh = false;
-  expect(1200);
-  expect(1226, TouchGesture::None, true);
-
-  // Both inputs can generate their independent events in the same update.
+  const uint32_t touchPress = press(100);
+  const uint32_t buttonPress = pressButton(200);
+  buttonHigh = true; expect(touchPress + 674);
+  expect(touchPress + 700, TouchGesture::Hold, ButtonGesture::ShortPress);
+  release(touchPress + 800, TouchGesture::None);
+  assert(buttonPress == 226);
   beginAt();
-  const uint32_t pressedAt = press(100);
-  buttonHigh = false;
-  expect(pressedAt + 674);
-  expect(pressedAt + 700, TouchGesture::Hold, true);
+  const uint32_t longButton = pressButton(100);
+  const uint32_t laterTouch = press(400);
+  expect(longButton + 1000, TouchGesture::Hold, ButtonGesture::LongPress);
+  assert(laterTouch == 426);
+  releaseButton(longButton + 1100, ButtonGesture::None);
+  release(longButton + 1200, TouchGesture::None);
 
+  // Press debounce itself crosses UINT32_MAX.
   const uint32_t maximum = std::numeric_limits<uint32_t>::max();
   beginAt(maximum - 20);
-  buttonHigh = false;
-  expect(maximum - 10);
-  expect(14);
-  expect(15, TouchGesture::None, true);
+  const uint32_t wrappedPress = pressButton(maximum - 10);
+  releaseButton(wrappedPress + 999, ButtonGesture::ShortPress);
 }
 }  // namespace
 
