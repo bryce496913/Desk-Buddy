@@ -436,6 +436,11 @@ void wakeBuddy(uint32_t now) {
 }  // namespace
 
 void beginBehaviorEngine(uint32_t now) {
+#if DESK_BUDDY_DIAGNOSTICS && defined(DESK_BUDDY_TEST_LIFE_SIMULATOR)
+  // Host simulations restart within one process; firmware initializes only once.
+  hasLastAutonomousBehavior = false;
+  lastAutonomousBehavior = AutonomousBehavior::Curious;
+#endif
   soundMode = BuddySoundMode::Normal;
   clearRecentInteraction();
   coreState = BuddyCoreState::Awake;
