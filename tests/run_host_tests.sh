@@ -143,4 +143,9 @@ run_test "diagnostic SoundEngine forced variants" sound_diagnostic_variants \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
   "${REPO_ROOT}/tests/sound_diagnostic_variants_test.cpp"
 
+run_test "Buddy life simulator" buddy_life_simulator \
+  -DDESK_BUDDY_DIAGNOSTICS=1 -DDESK_BUDDY_TEST_LIFE_SIMULATOR=1 \
+  "${REPO_ROOT}/tests/buddy_life_simulator_test.cpp" \
+  "${REPO_ROOT}/tests/BuddyLifeSimulator.cpp" "${REPO_ROOT}/BehaviorEngine.cpp"
+
 printf '[PASS] all host tests\n'
