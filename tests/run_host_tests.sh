@@ -58,6 +58,10 @@ run_test "FaceRenderer reaction exit" face_renderer_exit \
   -I"${REPO_ROOT}/tests/renderer_stubs" \
   "${REPO_ROOT}/tests/face_renderer_exit_test.cpp"
 
+run_test "FaceRenderer micro-animation foundation" face_renderer_micro_animation \
+  -I"${REPO_ROOT}/tests/renderer_stubs" \
+  "${REPO_ROOT}/tests/face_renderer_micro_animation_test.cpp"
+
 run_test "diagnostic BehaviorEngine" diagnostics_behavior \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
   "${REPO_ROOT}/tests/diagnostics_behavior_test.cpp" \

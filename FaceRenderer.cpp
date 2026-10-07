@@ -144,7 +144,34 @@ bool hasRenderedEyes = false;
   return result;
 }
 
-EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye,
+float reactionProgress01(uint32_t now) {
+  return clampf(float(static_cast<uint32_t>(now - reactionStartedAt)) /
+                REACTION_DURATION_MS, 0.0f, 1.0f);
+}
+
+[[maybe_unused]] float reactionPresentationProgress01(uint32_t now) {
+  const uint32_t elapsed = static_cast<uint32_t>(now - reactionStartedAt);
+  if (elapsed <= REACTION_ENTER_TRANSITION_MS) return 0.0f;
+  return clampf(float(elapsed - REACTION_ENTER_TRANSITION_MS) /
+                (REACTION_DURATION_MS - REACTION_ENTER_TRANSITION_MS), 0.0f, 1.0f);
+}
+
+// One shot: zero at either endpoint, smoothly rising to one at the midpoint.
+[[maybe_unused]] float smoothPulse(float progress) {
+  progress = clampf(progress, 0.0f, 1.0f);
+  return smoothstep01(1.0f - fabsf(2.0f * progress - 1.0f));
+}
+
+EyeExpressionParams applyReactionMicroAnimation(
+    FaceExpression expression, bool /*isLeftEye*/, uint32_t /*now*/,
+    EyeExpressionParams params) {
+  if (expression == FaceExpression::Normal) return params;
+  // Future expression adjustments use presentation progress and procedural curves
+  // here. This infrastructure pass deliberately preserves every existing target.
+  return params;
+}
+
+EyeExpressionParams baseExpressionParams(FaceExpression expression, bool isLeftEye,
                                     uint32_t now) {
   switch (expression) {
     case FaceExpression::Happy:
@@ -180,16 +207,14 @@ EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye,
     case FaceExpression::AnnoyedSquint:
       return {isLeftEye ? 0.38f : 0.44f, 0.26f, 18, 7, -2, 2, false, false};
     case FaceExpression::SleepyDrift: {
-      const float progress = clampf(float(static_cast<uint32_t>(now - reactionStartedAt)) /
-                                    REACTION_DURATION_MS, 0.0f, 1.0f);
+      const float progress = reactionProgress01(now);
       const float drift = progress < 0.65f ? progress / 0.65f
           : 1.0f - 0.65f * ((progress - 0.65f) / 0.35f);
       return {0.48f + drift * 0.22f, 0.12f, 17, 8,
               int(drift * 5), int(drift * 13), false, false};
     }
     case FaceExpression::ExcitedScanning: {
-      const float progress = clampf(float(static_cast<uint32_t>(now - reactionStartedAt)) /
-                                    REACTION_DURATION_MS, 0.0f, 1.0f);
+      const float progress = reactionProgress01(now);
       // Smooth left -> center -> right -> center over the existing duration.
       const float scan = progress < 0.66f ? lerpf(-15.0f, 15.0f, progress / 0.66f)
           : lerpf(15.0f, 0.0f, (progress - 0.66f) / 0.34f);
@@ -199,6 +224,13 @@ EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye,
     default:
       return {lidAmount, lidAmount, 18, 8, 0, 0, false, false};
   }
+}
+
+EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye,
+                                    uint32_t now) {
+  const EyeExpressionParams base = baseExpressionParams(expression, isLeftEye, now);
+  if (expression == FaceExpression::Normal) return base;
+  return applyReactionMicroAnimation(expression, isLeftEye, now, base);
 }
 
 EyeExpressionParams visualExpressionParams(uint32_t now, BuddyReaction reaction,
