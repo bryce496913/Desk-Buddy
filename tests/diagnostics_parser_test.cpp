@@ -306,9 +306,13 @@ int main() {
   assert(Serial.output == "DIAG: Sound Mode = Normal\n");
   Serial.clearOutput(); Serial.push('q'); updateDiagnostics(300); updateDiagnostics(301);
   assert(Serial.output.empty());
-  sendCommand("x"); assert(Serial.output == "DIAG: Invalid quiet command (use q?)\n");
+  sendCommand("x"); assert(Serial.output == "DIAG: Invalid quiet command (use q?, qn or qq)\n");
   Serial.clearOutput(); sendCommand("Q \n?");
   assert(Serial.output == "DIAG: Sound Mode = Normal\n");
+  Serial.clearOutput(); sendCommand("qqq?");
+  assert(Serial.output == "DIAG: Sound Mode = Quiet\nDIAG: Sound Mode = Quiet\n");
+  Serial.clearOutput(); sendCommand("qnq?");
+  assert(Serial.output == "DIAG: Sound Mode = Normal\nDIAG: Sound Mode = Normal\n");
   return 0;
 }
 
@@ -317,4 +321,6 @@ DiagnosticSoundSelection getDiagnosticSoundSelection() {
 }
 DiagnosticSoundWeights getDiagnosticSoundWeights(ReactionSound, BuddyMood) { return {{1, 1, 1}}; }
 
-BuddySoundMode getBuddySoundMode() { return BuddySoundMode::Normal; }
+BuddySoundMode parserSoundMode = BuddySoundMode::Normal;
+BuddySoundMode getBuddySoundMode() { return parserSoundMode; }
+void setDiagnosticSoundMode(BuddySoundMode mode) { parserSoundMode = mode; }

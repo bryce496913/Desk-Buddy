@@ -88,6 +88,7 @@ struct DiagnosticMoodState {
 
 DiagnosticMoodState getDiagnosticMoodState(uint32_t now);
 void setDiagnosticMood(BuddyMood mood, uint32_t now);
+void setDiagnosticSoundMode(BuddySoundMode mode);
 bool triggerDiagnosticReaction(DiagnosticReaction reaction,
                                DiagnosticSoundVariant variant, uint32_t now,
                                uint8_t &selectedVariantIndex);

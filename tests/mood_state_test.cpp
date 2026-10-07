@@ -985,11 +985,12 @@ void testQuietModeStateAndIsolation() {
     assert(faceStarts == 0 && soundStarts == 0);
     // Both user modes select exactly the same visual/audio reaction plan.
     processBuddyEvent(BuddyEvent::TouchTap, 110);
-    const auto quietFace = expression; const auto quietSound = sound;
+    const auto quietFace = expression;
+    assert(sound == ReactionSound::None && soundStarts == 0);
     assert(getBuddySoundMode() == BuddySoundMode::Quiet);
     beginAt(); setDiagnosticMood(mood, 100);
     processBuddyEvent(BuddyEvent::TouchTap, 110);
-    assert(expression == quietFace && sound == quietSound);
+    assert(expression == quietFace && sound != ReactionSound::None);
   }
   beginAt();
   processBuddyEvent(BuddyEvent::TouchTap, 110);
@@ -997,10 +998,10 @@ void testQuietModeStateAndIsolation() {
   const auto before = getDiagnosticMoodState(112);
   const auto memory = getDiagnosticRecentInteractionContext(112);
   const int starts = faceStarts; const int audioStarts = soundStarts;
-  const auto activeFace = expression; const auto activeSound = sound;
+  const auto activeFace = expression;
   processBuddyEvent(BuddyEvent::ButtonLongPress, 112);
   assert(getBuddyReaction() == BuddyReaction::Generic && faceStarts == starts && soundStarts == audioStarts);
-  assert(expression == activeFace && sound == activeSound && soundActive);
+  assert(expression == activeFace && sound == ReactionSound::None && !soundActive);
   const auto after = getDiagnosticMoodState(112);
   assert(before.mood == after.mood && before.engagementScore == after.engagementScore &&
          before.irritationScore == after.irritationScore && before.inactivityMs == after.inactivityMs);
