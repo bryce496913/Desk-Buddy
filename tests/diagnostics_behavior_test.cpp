@@ -47,17 +47,17 @@ void startReactionSound(uint32_t, ReactionSound sound, BuddyMood) {
 }
 bool startDiagnosticReactionSound(uint32_t, ReactionSound sound,
                                   uint8_t requestedVariantIndex,
-                                  uint8_t &selectedVariantIndex) {
+                                  uint8_t &selectedVariantIndex, BuddyMood mood) {
   lastRequestedVariant = requestedVariantIndex;
   if (sound == ReactionSound::None) {
     selectedVariantIndex = DIAGNOSTIC_RANDOM_VARIANT;
-    startReactionSound(0, sound, BuddyMood::Calm);
+    startReactionSound(0, sound, mood);
     return true;
   }
   selectedVariantIndex = requestedVariantIndex == DIAGNOSTIC_RANDOM_VARIANT
       ? 2
       : requestedVariantIndex;
-  startReactionSound(0, sound, BuddyMood::Calm);
+  startReactionSound(0, sound, mood);
   return selectedVariantIndex < 3;
 }
 void stopReactionSound() {

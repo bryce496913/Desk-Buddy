@@ -220,9 +220,46 @@ struct VariantWeights {
   uint8_t values[3];
 };
 
-VariantWeights weightsFor(ReactionSound /*sound*/, BuddyMood /*mood*/) {
-  // Foundation: every family and mood has the same preference.
-  return {{1, 1, 1}};
+// Rows: Happy, Curious, Annoyed, Startled, Suspicious, Confused.
+// Columns: Calm, Engaged, Grumpy, Sleepy. Values retain variant 1/2/3 order.
+constexpr VariantWeights MOOD_VARIANT_PROFILES[6][4] = {
+    {{{45, 35, 20}}, {{25, 30, 45}}, {{50, 35, 15}}, {{55, 35, 10}}},
+    {{{40, 35, 25}}, {{45, 30, 25}}, {{15, 30, 55}}, {{15, 55, 30}}},
+    {{{40, 30, 30}}, {{35, 20, 45}}, {{20, 55, 25}}, {{45, 40, 15}}},
+    {{{45, 30, 25}}, {{25, 45, 30}}, {{30, 20, 50}}, {{30, 55, 15}}},
+    {{{40, 35, 25}}, {{25, 45, 30}}, {{20, 30, 50}}, {{35, 20, 45}}},
+    {{{40, 35, 25}}, {{45, 35, 20}}, {{20, 30, 50}}, {{20, 50, 30}}}
+};
+constexpr bool validMoodProfiles() {
+  for (const auto &family : MOOD_VARIANT_PROFILES) {
+    for (const auto &profile : family) {
+      if (profile.values[0] == 0 || profile.values[1] == 0 || profile.values[2] == 0 ||
+          profile.values[0] + profile.values[1] + profile.values[2] != 100) return false;
+    }
+  }
+  return true;
+}
+static_assert(validMoodProfiles(), "Every mood profile must have three positive weights totaling 100");
+
+VariantWeights weightsFor(ReactionSound sound, BuddyMood mood) {
+  uint8_t family = 0;
+  switch (sound) {
+    case ReactionSound::Happy: family = 0; break;
+    case ReactionSound::Curious: family = 1; break;
+    case ReactionSound::Annoyed: family = 2; break;
+    case ReactionSound::Startled: family = 3; break;
+    case ReactionSound::Suspicious: family = 4; break;
+    case ReactionSound::Confused: family = 5; break;
+    case ReactionSound::None: return {{1, 1, 1}}; // Not selected: None is silent.
+  }
+  uint8_t context = 0;
+  switch (mood) {
+    case BuddyMood::Calm: context = 0; break;
+    case BuddyMood::Engaged: context = 1; break;
+    case BuddyMood::Grumpy: context = 2; break;
+    case BuddyMood::Sleepy: context = 3; break;
+  }
+  return MOOD_VARIANT_PROFILES[family][context];
 }
 
 uint8_t selectWeightedVariant(const VariantWeights &weights, uint8_t &lastVariant) {
@@ -316,7 +353,7 @@ void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood) {
 #if DESK_BUDDY_DIAGNOSTICS
 bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,
                                   uint8_t requestedVariantIndex,
-                                  uint8_t &selectedVariantIndex) {
+                                  uint8_t &selectedVariantIndex, BuddyMood mood) {
   selectedVariantIndex = DIAGNOSTIC_RANDOM_VARIANT;
 
   const SequenceDefinition *sequences = nullptr;
@@ -367,8 +404,7 @@ bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,
   }
 
   if (requestedVariantIndex == DIAGNOSTIC_RANDOM_VARIANT) {
-    // Diagnostic mood propagation is deferred; all moods are equal in this pass.
-    selectedVariantIndex = selectWeightedVariant(weightsFor(sound, BuddyMood::Calm), *lastVariant);
+    selectedVariantIndex = selectWeightedVariant(weightsFor(sound, mood), *lastVariant);
   } else {
     if (requestedVariantIndex >= variantCount) return false;
     selectedVariantIndex = requestedVariantIndex;

@@ -986,6 +986,7 @@ void testDirectDiagnosticReactionsIgnoreMoodContext() {
     setDiagnosticMood(mood, 100);
     triggerDiagnostic(DiagnosticReaction::Happy, 110);
     expectReaction(FaceExpression::Happy, ReactionSound::Happy, mood);
+    assert(soundMood == mood);
     triggerDiagnostic(DiagnosticReaction::Curious, 115);
     expectReaction(FaceExpression::Curious, ReactionSound::Curious, mood);
     triggerDiagnostic(DiagnosticReaction::Annoyed, 120);
@@ -1033,11 +1034,11 @@ void startReactionSound(uint32_t, ReactionSound requestedSound, BuddyMood mood) 
 }
 bool startDiagnosticReactionSound(uint32_t now, ReactionSound requestedSound,
                                   uint8_t requestedVariant,
-                                  uint8_t &selectedVariant) {
+                                  uint8_t &selectedVariant, BuddyMood mood) {
   selectedVariant = requestedSound == ReactionSound::None
       ? DIAGNOSTIC_RANDOM_VARIANT
       : (requestedVariant == DIAGNOSTIC_RANDOM_VARIANT ? 0 : requestedVariant);
-  startReactionSound(now, requestedSound, BuddyMood::Calm);
+  startReactionSound(now, requestedSound, mood);
   return true;
 }
 void stopReactionSound() {

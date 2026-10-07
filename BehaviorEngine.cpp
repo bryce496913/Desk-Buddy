@@ -674,7 +674,7 @@ bool triggerDiagnosticReaction(DiagnosticReaction reaction,
     requestedVariantIndex = static_cast<uint8_t>(variant) - 1;
   }
   if (!startDiagnosticReactionSound(now, sound, requestedVariantIndex,
-                                    selectedVariantIndex)) {
+                                    selectedVariantIndex, currentMood)) {
     return false;
   }
 

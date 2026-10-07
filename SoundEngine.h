@@ -22,7 +22,7 @@ void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood);
 constexpr uint8_t DIAGNOSTIC_RANDOM_VARIANT = UINT8_MAX;
 bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,
                                   uint8_t requestedVariantIndex,
-                                  uint8_t &selectedVariantIndex);
+                                  uint8_t &selectedVariantIndex, BuddyMood mood);
 #endif
 void stopReactionSound();
 void updateSoundEngine(uint32_t now, BuddyReaction reaction);

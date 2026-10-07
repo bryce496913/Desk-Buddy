@@ -43,7 +43,7 @@ int main() {
     for (uint8_t variant = 0; variant < reaction.count; variant++) {
       *reaction.lastVariant = UINT8_MAX;
       assert(startDiagnosticReactionSound(100, reaction.sound, variant,
-                                          selected));
+                                          selected, BuddyMood::Calm));
       assert(selected == variant);
       assert(currentDefinition == &reaction.sequences[variant]);
       assert(*reaction.lastVariant == UINT8_MAX);
@@ -51,19 +51,19 @@ int main() {
 
     const SequenceDefinition *beforeInvalid = currentDefinition;
     assert(!startDiagnosticReactionSound(101, reaction.sound, reaction.count,
-                                         selected));
+                                         selected, BuddyMood::Calm));
     assert(currentDefinition == beforeInvalid);
 
     // Random diagnostics use the production selector and its repeat avoidance.
     *reaction.lastVariant = 0;
     nextRandom = 0;
     assert(startDiagnosticReactionSound(102, reaction.sound,
-                                        DIAGNOSTIC_RANDOM_VARIANT, selected));
+                                        DIAGNOSTIC_RANDOM_VARIANT, selected, BuddyMood::Calm));
     assert(selected != 0);
     assert(*reaction.lastVariant == selected);
   }
 
-  assert(startDiagnosticReactionSound(103, ReactionSound::None, 2, selected));
+  assert(startDiagnosticReactionSound(103, ReactionSound::None, 2, selected, BuddyMood::Calm));
   assert(selected == DIAGNOSTIC_RANDOM_VARIANT);
   assert(currentSequence == SoundSequence::None);
   return 0;

@@ -209,9 +209,9 @@ void startReactionSound(uint32_t, ReactionSound requested, BuddyMood) {
   ++soundStarts;
 }
 bool startDiagnosticReactionSound(uint32_t now, ReactionSound requested,
-                                  uint8_t, uint8_t &selected) {
+                                  uint8_t, uint8_t &selected, BuddyMood mood) {
   selected = requested == ReactionSound::None ? DIAGNOSTIC_RANDOM_VARIANT : 0;
-  startReactionSound(now, requested, BuddyMood::Calm);
+  startReactionSound(now, requested, mood);
   return true;
 }
 void stopReactionSound() {
