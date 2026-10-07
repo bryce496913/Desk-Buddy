@@ -135,14 +135,14 @@ void testSleepWakePreservesEveryMood() {
   for (BuddyMood mood : moods) {
     beginAt();
     setDiagnosticMood(mood, 100);
-    processBuddyEvent(BuddyEvent::ButtonPressed, 110);
+    processBuddyEvent(BuddyEvent::ButtonShortPress, 110);
     expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, mood);
     processBuddyEvent(BuddyEvent::TouchTap, 120);
     processBuddyEvent(BuddyEvent::SoundDetected, 130);
     updateBehaviorEngine(140);
     expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, mood);
     assert(faceStarts == 0);
-    processBuddyEvent(BuddyEvent::ButtonPressed, 150);
+    processBuddyEvent(BuddyEvent::ButtonShortPress, 150);
     const BuddyMood wakeMood = mood == BuddyMood::Sleepy ? BuddyMood::Calm : mood;
     expectState(BuddyCoreState::Awake, BuddyReaction::Idle, wakeMood);
   }
@@ -181,7 +181,7 @@ void testMoodChangesPreserveHistories() {
 void testReinitializationResetsMood() {
   beginAt();
   setDiagnosticMood(BuddyMood::Grumpy, 100);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 110);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 110);
   expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, BuddyMood::Grumpy);
   beginBehaviorEngine(200);
   expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Calm);
@@ -277,9 +277,9 @@ void testSleepWakePreservesAccumulatedScores() {
   // first touch after wake (20 + 20), rather than starting from zero again.
   beginAt();
   processBuddyEvent(BuddyEvent::TouchTap, 110);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 120);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 120);
   updateBehaviorEngine(1000000);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 1000010);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 1000010);
   processBuddyEvent(BuddyEvent::TouchTap, 1000020);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
 
@@ -289,8 +289,8 @@ void testSleepWakePreservesAccumulatedScores() {
   for (uint32_t now = 110; now < 114; ++now) {
     processBuddyEvent(BuddyEvent::TouchTap, now);
   }
-  processBuddyEvent(BuddyEvent::ButtonPressed, 120);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 130);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 120);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 130);
   processBuddyEvent(BuddyEvent::TouchTap, 140);
   expectReaction(FaceExpression::Happy, ReactionSound::Happy, BuddyMood::Engaged);
   processBuddyEvent(BuddyEvent::TouchTap, 150);
@@ -299,9 +299,9 @@ void testSleepWakePreservesAccumulatedScores() {
   processBuddyEvent(BuddyEvent::TouchTap, 160);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious,
                  BuddyMood::Grumpy);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 170);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 170);
   expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, BuddyMood::Grumpy);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 180);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 180);
   expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Grumpy);
 }
 
@@ -407,11 +407,11 @@ void testLongGapSaturatesAtZero() {
 void testSleepPausesDecayClock() {
   beginAt(0);
   buildTouchMood(1, 5);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 9999);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 9999);
   constexpr uint32_t wakeAt = 8 * 60 * 60 * 1000;
   updateBehaviorEngine(wakeAt - 1);
   expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, BuddyMood::Grumpy);
-  processBuddyEvent(BuddyEvent::ButtonPressed, wakeAt);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, wakeAt);
   updateBehaviorEngine(wakeAt);
   expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Grumpy);
   updateBehaviorEngine(wakeAt + 9999);
@@ -610,14 +610,14 @@ void testAutonomousAndDiagnosticReactionsAreNotActivity() {
 
 void testPhysicalSleepResetsWakingInactivity() {
   beginAt(0);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 10);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 10);
   constexpr uint32_t wakeAt = 8 * 60 * 60 * 1000;
   updateBehaviorEngine(wakeAt - 1);
   expectState(BuddyCoreState::Sleeping, BuddyReaction::Idle, BuddyMood::Calm);
   // Ignored sleeping input must not build scores or wake Buddy.
   processBuddyEvent(BuddyEvent::TouchTap, wakeAt - 1);
   processBuddyEvent(BuddyEvent::SoundDetected, wakeAt - 1);
-  processBuddyEvent(BuddyEvent::ButtonPressed, wakeAt);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, wakeAt);
   updateBehaviorEngine(wakeAt);
   expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Calm);
   updateBehaviorEngine(wakeAt + 89999);
@@ -949,6 +949,70 @@ void testFirstSoundComparisonAndThresholdCrossing() {
   assert(getDiagnosticMoodState(20001).engagementScore == 40);
 }
 
+void testQuietModeStateAndIsolation() {
+  beginAt();
+  assert(getBuddySoundMode() == BuddySoundMode::Normal);
+  processBuddyEvent(BuddyEvent::ButtonLongPress, 101);
+  assert(getBuddyCoreState() == BuddyCoreState::Awake && getBuddySoundMode() == BuddySoundMode::Quiet);
+  processBuddyEvent(BuddyEvent::ButtonLongPress, 102);
+  assert(getBuddySoundMode() == BuddySoundMode::Normal);
+  processBuddyEvent(BuddyEvent::ButtonLongPress, 103);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 104);
+  assert(getBuddyCoreState() == BuddyCoreState::Sleeping && getBuddySoundMode() == BuddySoundMode::Quiet);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 105);
+  assert(getBuddyCoreState() == BuddyCoreState::Awake && getBuddySoundMode() == BuddySoundMode::Quiet);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 106);
+  processBuddyEvent(BuddyEvent::ButtonLongPress, 107);
+  assert(getBuddyCoreState() == BuddyCoreState::Awake && getBuddySoundMode() == BuddySoundMode::Quiet);
+  beginAt(108);
+  assert(getBuddySoundMode() == BuddySoundMode::Normal);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 109);
+  processBuddyEvent(BuddyEvent::ButtonLongPress, 110);
+  assert(getBuddyCoreState() == BuddyCoreState::Awake && getBuddySoundMode() == BuddySoundMode::Normal);
+
+  for (BuddyMood mood : moods) {
+    beginAt(); setDiagnosticMood(mood, 100);
+    const auto before = getDiagnosticMoodState(101);
+    const auto schedule = getDiagnosticAutonomousTimingState(101);
+    processBuddyEvent(BuddyEvent::ButtonLongPress, 101);
+    const auto after = getDiagnosticMoodState(101);
+    assert(after.mood == before.mood && after.engagementScore == before.engagementScore &&
+           after.irritationScore == before.irritationScore && after.inactivityMs == before.inactivityMs);
+    assert(getBuddySoundMode() == BuddySoundMode::Quiet && getBuddyReaction() == BuddyReaction::Idle);
+    const auto afterSchedule = getDiagnosticAutonomousTimingState(101);
+    assert(afterSchedule.scheduled == schedule.scheduled && afterSchedule.scheduleMood == schedule.scheduleMood &&
+           afterSchedule.remainingMs == schedule.remainingMs);
+    assert(faceStarts == 0 && soundStarts == 0);
+    // Both user modes select exactly the same visual/audio reaction plan.
+    processBuddyEvent(BuddyEvent::TouchTap, 110);
+    const auto quietFace = expression; const auto quietSound = sound;
+    assert(getBuddySoundMode() == BuddySoundMode::Quiet);
+    beginAt(); setDiagnosticMood(mood, 100);
+    processBuddyEvent(BuddyEvent::TouchTap, 110);
+    assert(expression == quietFace && sound == quietSound);
+  }
+  beginAt();
+  processBuddyEvent(BuddyEvent::TouchTap, 110);
+  processBuddyEvent(BuddyEvent::SoundDetected, 111);
+  const auto before = getDiagnosticMoodState(112);
+  const auto memory = getDiagnosticRecentInteractionContext(112);
+  const int starts = faceStarts; const int audioStarts = soundStarts;
+  const auto activeFace = expression; const auto activeSound = sound;
+  processBuddyEvent(BuddyEvent::ButtonLongPress, 112);
+  assert(getBuddyReaction() == BuddyReaction::Generic && faceStarts == starts && soundStarts == audioStarts);
+  assert(expression == activeFace && sound == activeSound && soundActive);
+  const auto after = getDiagnosticMoodState(112);
+  assert(before.mood == after.mood && before.engagementScore == after.engagementScore &&
+         before.irritationScore == after.irritationScore && before.inactivityMs == after.inactivityMs);
+  const auto afterMemory = getDiagnosticRecentInteractionContext(112);
+  assert(memory.type == afterMemory.type && memory.ageMs == afterMemory.ageMs && memory.recent == afterMemory.recent);
+  processBuddyEvent(BuddyEvent::SoundDetected, 113);
+  assert(expression == FaceExpression::Suspicious); // Sound streak two survived toggle.
+  processBuddyEvent(BuddyEvent::TouchTap, 114);
+  assert(expression == FaceExpression::Curious); // Tap streak two survived toggle.
+  assert(getBuddySoundMode() == BuddySoundMode::Quiet && getBuddyMood() == BuddyMood::Engaged);
+}
+
 void testSoundMoodThresholdCrossing() {
   beginAt();
   processBuddyEvent(BuddyEvent::TouchTap, 110);
@@ -1000,8 +1064,8 @@ void testGrumpyTouchContextAfterPhysicalWake() {
   beginAt();
   buildTouchMood(110, 5);
   assert(getBuddyMood() == BuddyMood::Grumpy);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 120);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 130);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 120);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 130);
   expectState(BuddyCoreState::Awake, BuddyReaction::Idle, BuddyMood::Grumpy);
   processBuddyEvent(BuddyEvent::TouchTap, 140);
   expectReaction(FaceExpression::Curious, ReactionSound::Curious, BuddyMood::Grumpy);
@@ -1090,6 +1154,7 @@ int main() {
   testFirstSoundComparisonAndThresholdCrossing();
   testSleepySecondSoundUsesArrivalMood();
   testSoundMoodThresholdCrossing();
+  testQuietModeStateAndIsolation();
   testDirectDiagnosticReactionsIgnoreMoodContext();
   testGrumpyTouchContextAfterPhysicalWake();
   return 0;

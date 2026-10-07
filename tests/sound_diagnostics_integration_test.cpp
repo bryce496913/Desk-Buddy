@@ -32,6 +32,12 @@ void equalMood(const DiagnosticMoodState& a, const DiagnosticMoodState& b) {
 }
 int main() {
   beginSoundEngine(); beginBehaviorEngine(100);
+  command("q?"); assert(Serial.output == "DIAG: Sound Mode = Normal\n");
+  processBuddyEvent(BuddyEvent::ButtonLongPress, 100);
+  Serial.clearOutput(); command("q?");
+  assert(Serial.output == "DIAG: Sound Mode = Quiet\n");
+  assert(getBuddySoundMode() == BuddySoundMode::Quiet);
+  Serial.clearOutput();
   command("s?"); assert(Serial.output == "DIAG: Sound = None\n");
   Serial.clearOutput();
   Serial.push('s'); updateDiagnostics(100); updateDiagnostics(101);

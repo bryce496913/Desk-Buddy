@@ -159,7 +159,7 @@ void testBoundariesAndRollover() {
 void testSleepAutonomyAndDiagnosticExclusion() {
   beginAt();
   processBuddyEvent(BuddyEvent::TouchTap, 1000);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 1001);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 1001);
   memory(1001, Type::None, 0, false);
   Serial.clearOutput();
   command("i?", 1001);
@@ -168,7 +168,7 @@ void testSleepAutonomyAndDiagnosticExclusion() {
     processBuddyEvent(event, 1002);
     memory(1002, Type::None, 0, false);
   }
-  processBuddyEvent(BuddyEvent::ButtonPressed, 1003);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 1003);
   memory(1003, Type::None, 0, false);
   Serial.clearOutput();
   command("i?", 1003);

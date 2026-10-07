@@ -154,7 +154,7 @@ void testSleepWakeAndHistoryReset() {
   expectReaction(FaceExpression::Confused, ReactionSound::Confused);
 
   const int startsBeforeSleep = faceReactionStarts;
-  processBuddyEvent(BuddyEvent::ButtonPressed, 70);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 70);
   assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
   assert(getBuddyMood() == BuddyMood::Engaged);
   assert(getBuddyReaction() == BuddyReaction::Idle);
@@ -168,7 +168,7 @@ void testSleepWakeAndHistoryReset() {
   assert(getBuddyReaction() == BuddyReaction::Idle);
   assert(faceReactionStarts == startsBeforeSleep);
 
-  processBuddyEvent(BuddyEvent::ButtonPressed, 100);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 100);
   assert(getBuddyCoreState() == BuddyCoreState::Awake);
   assert(wakeFaceRequests == 1);
   assert(getBuddyMood() == BuddyMood::Engaged);
@@ -333,12 +333,12 @@ void testAutonomousSelectionUsesCurrentMood() {
 
 void testSleepSuppressesAutonomy() {
   beginAt(0);
-  processBuddyEvent(BuddyEvent::ButtonPressed, 100);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 100);
   updateBehaviorEngine(1000000);
   assert(getBuddyCoreState() == BuddyCoreState::Sleeping);
   assert(faceReactionStarts == 0);
 
-  processBuddyEvent(BuddyEvent::ButtonPressed, 1000000);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 1000000);
   updateBehaviorEngine(1000000);
   updateBehaviorEngine(1027999);
   assert(getBuddyReaction() == BuddyReaction::Idle);
