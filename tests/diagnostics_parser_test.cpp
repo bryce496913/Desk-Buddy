@@ -26,6 +26,9 @@ BuddyCoreState coreState = BuddyCoreState::Awake;
 DiagnosticAutonomousBehavior lastAutonomous = DiagnosticAutonomousBehavior::Curious;
 int autonomousTriggerCount = 0;
 DiagnosticAutonomousTimingState timing = {false, BuddyMood::Calm, 0, 28000, 45000};
+int eventCalls = 0;
+BuddyEvent lastEvent = BuddyEvent::IdleTimeout;
+uint32_t lastEventAt = 0;
 int timingReadCount = 0;
 uint32_t timingReadAt = 0;
 
@@ -37,6 +40,7 @@ void sendCommand(const char* command) {
 }
 }
 
+void processBuddyEvent(BuddyEvent event, uint32_t now) { ++eventCalls; lastEvent = event; lastEventAt = now; }
 BuddyCoreState getBuddyCoreState() { return coreState; }
 DiagnosticAutonomousTimingState getDiagnosticAutonomousTimingState(uint32_t now) {
   ++timingReadCount;
@@ -313,6 +317,27 @@ int main() {
   assert(Serial.output == "DIAG: Sound Mode = Quiet\nDIAG: Sound Mode = Quiet\n");
   Serial.clearOutput(); sendCommand("qnq?");
   assert(Serial.output == "DIAG: Sound Mode = Normal\nDIAG: Sound Mode = Normal\n");
+  coreState = BuddyCoreState::Awake;
+  Serial.clearOutput(); sendCommand("e?");
+  assert(Serial.output.find("et: Simulate TouchTap") != std::string::npos);
+  assert(Serial.output.find("eh: Simulate TouchHold") != std::string::npos);
+  const int beforeEvents = eventCalls;
+  Serial.clearOutput(); Serial.push('e'); updateDiagnostics(300); updateDiagnostics(301);
+  assert(Serial.output.empty() && eventCalls == beforeEvents);
+  Serial.push('t'); updateDiagnostics(302);
+  assert(eventCalls == beforeEvents + 1 && lastEvent == BuddyEvent::TouchTap && lastEventAt == 302);
+  assert(Serial.output == "DIAG EVENT: TouchTap\n");
+  Serial.clearOutput(); sendCommand("eh");
+  assert(lastEvent == BuddyEvent::TouchHold && Serial.output == "DIAG EVENT: TouchHold\n");
+  Serial.clearOutput(); sendCommand("exm?");
+  assert(Serial.output.find("DIAG: Invalid event command (use e?, et or eh)\n") == 0);
+  assert(Serial.output.find("DIAG: Mood =") != std::string::npos);
+  const int afterEvents = eventCalls;
+  sendCommand("e \nT"); assert(eventCalls == afterEvents + 1 && lastEvent == BuddyEvent::TouchTap);
+  coreState = BuddyCoreState::Sleeping;
+  Serial.clearOutput(); sendCommand("eh");
+  assert(Serial.output == "DIAG: Event ignored while sleeping\n");
+  assert(coreState == BuddyCoreState::Sleeping);
   return 0;
 }
 
