@@ -160,6 +160,7 @@ uint32_t lastSoundAt = 0;
 uint8_t soundStreak = 0;
 uint32_t nextAutonomousBehaviorAt = 0;
 bool autonomousBehaviorScheduled = false;
+BuddyMood autonomousScheduleMood = BuddyMood::Calm;
 bool autonomousReactionActive = false;
 AutonomousBehavior lastAutonomousBehavior = AutonomousBehavior::Curious;
 bool hasLastAutonomousBehavior = false;
@@ -222,6 +223,7 @@ AutonomousTimingRange autonomousTimingFor(BuddyMood mood) {
 }
 
 void scheduleNextAutonomousBehavior(uint32_t now) {
+  autonomousScheduleMood = currentMood;
   const AutonomousTimingRange range = autonomousTimingFor(currentMood);
 #if DESK_BUDDY_DIAGNOSTICS
   (void)now;
@@ -467,6 +469,14 @@ void updateBehaviorEngine(uint32_t now) {
   }
 
   if (autonomousCompleted) scheduleNextAutonomousBehavior(now);
+
+  // Interaction handlers already stamp their final mood when scheduling.
+  // Defer transitions during reactions; autonomous completion owns its schedule.
+  if (coreState == BuddyCoreState::Awake &&
+      activeReaction == BuddyReaction::Idle && autonomousBehaviorScheduled &&
+      !autonomousReactionActive && currentMood != autonomousScheduleMood) {
+    scheduleNextAutonomousBehavior(now);
+  }
 
   if (coreState == BuddyCoreState::Awake && autonomousBehaviorScheduled &&
       timeReached(now, nextAutonomousBehaviorAt)) {

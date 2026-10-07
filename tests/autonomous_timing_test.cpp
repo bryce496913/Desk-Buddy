@@ -126,7 +126,7 @@ void testStartupInteractionsAndCompletion() {
   assert(currentMood == BuddyMood::Sleepy);
   expectScheduled(90000, 45000);
 }
-void testSleepWakeAndNoDecayReschedule() {
+void testSleepWakeAndDecayReschedule() {
   timingTicket = TimingTicket::Minimum;
   for (BuddyMood mood : {BuddyMood::Calm, BuddyMood::Engaged, BuddyMood::Grumpy, BuddyMood::Sleepy}) {
     beginAt(100000);
@@ -144,8 +144,8 @@ void testSleepWakeAndNoDecayReschedule() {
   scheduleNextAutonomousBehavior(0);
   updateBehaviorEngine(10000);
   assert(currentMood == BuddyMood::Calm);
-  assert(nextAutonomousBehaviorAt == 12000);  // Decay alone does not reschedule.
-  updateBehaviorEngine(12000);
+  assert(nextAutonomousBehaviorAt == 38000);  // A crossed mood boundary refreshes timing.
+  updateBehaviorEngine(38000);
   assert(activeReaction == BuddyReaction::Generic);
   assert(isAutonomousExpressionForMood(expression, BuddyMood::Calm));
 }
@@ -156,6 +156,9 @@ void testRolloverDeadlines() {
       timingTicket = ticket;
       beginAt(anchor);
       seedMood(mood, anchor);
+      // Keep the configured mood stable while testing its original deadline.
+      if (mood == BuddyMood::Engaged) engagementScore = 100;
+      if (mood == BuddyMood::Grumpy) irritationScore = 100;
       scheduleNextAutonomousBehavior(anchor);
       const uint32_t deadline = nextAutonomousBehaviorAt;
       assert(!timeReached(anchor, deadline));
@@ -167,6 +170,106 @@ void testRolloverDeadlines() {
       assert(sound == ReactionSound::None);
     }
   }
+}
+
+void testMoodTransitionReschedulingAndRandomCalls() {
+  timingTicket = TimingTicket::Minimum;
+  beginAt(0);
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
+  const int beforeInteraction = timingCalls;
+  processBuddyEvent(BuddyEvent::TouchTap, 101);
+  assert(currentMood == BuddyMood::Engaged);
+  expectScheduled(101, 12000);
+  assert(autonomousScheduleMood == BuddyMood::Engaged);
+  assert(timingCalls == beforeInteraction + 1);
+  updateBehaviorEngine(101);
+  assert(timingCalls == beforeInteraction + 1);  // No second draw during interaction.
+
+  beginAt(0);
+  seedMood(BuddyMood::Engaged, 0);
+  engagementScore = 80;
+  scheduleNextAutonomousBehavior(0);
+  const int beforeSameMood = timingCalls;
+  updateBehaviorEngine(10000);
+  assert(engagementScore == 75 && currentMood == BuddyMood::Engaged);
+  assert(nextAutonomousBehaviorAt == 12000 && timingCalls == beforeSameMood);
+
+  beginAt(0);
+  seedMood(BuddyMood::Grumpy, 0);
+  engagementScore = 60;
+  scheduleNextAutonomousBehavior(0);
+  const int beforeRecovery = timingCalls;
+  updateBehaviorEngine(10000);
+  assert(currentMood == BuddyMood::Grumpy && timingCalls == beforeRecovery);
+  updateBehaviorEngine(20000);  // Irritation 55, engagement 50: Engaged.
+  assert(currentMood == BuddyMood::Engaged);
+  expectScheduled(20000, 12000);
+  assert(timingCalls == beforeRecovery + 1);
+  assert(activeReaction == BuddyReaction::Idle);  // Discard the due Grumpy deadline.
+
+  beginAt(0);
+  const int beforeSleepy = timingCalls;
+  updateBehaviorEngine(90000);  // Overdue Calm deadline must not fire.
+  assert(currentMood == BuddyMood::Sleepy && activeReaction == BuddyReaction::Idle);
+  expectScheduled(90000, 45000);
+  assert(timingCalls == beforeSleepy + 1);
+  updateBehaviorEngine(90000);
+  assert(timingCalls == beforeSleepy + 1);
+
+  constexpr uint32_t anchor = std::numeric_limits<uint32_t>::max() - 5000;
+  timingTicket = TimingTicket::Maximum;
+  beginAt(anchor);
+  seedMood(BuddyMood::Engaged, anchor);
+  scheduleNextAutonomousBehavior(anchor);
+  const int beforeWrap = timingCalls;
+  updateBehaviorEngine(anchor + uint32_t{10000});
+  assert(currentMood == BuddyMood::Calm);
+  expectScheduled(anchor + uint32_t{10000}, 45000);
+  assert(autonomousScheduleMood == BuddyMood::Calm && timingCalls == beforeWrap + 1);
+  updateBehaviorEngine(anchor + uint32_t{54999});
+  assert(activeReaction == BuddyReaction::Idle);
+  updateBehaviorEngine(anchor + uint32_t{55000});
+  assert(activeReaction == BuddyReaction::Generic);
+}
+
+void testActiveReactionDefersTransitionSchedule() {
+  timingTicket = TimingTicket::Minimum;
+  beginAt(100);
+  seedMood(BuddyMood::Engaged, 100);
+  processBuddyEvent(BuddyEvent::IdleTimeout, 100);
+  assert(autonomousReactionActive && !autonomousBehaviorScheduled);
+  const int beforeAutonomous = timingCalls;
+  updateBehaviorEngine(10100);  // Decay to Calm while autonomy is unfinished.
+  assert(currentMood == BuddyMood::Calm && autonomousReactionActive);
+  assert(!autonomousBehaviorScheduled && timingCalls == beforeAutonomous);
+  finishAt(10101);
+  expectScheduled(10101, 28000);
+  assert(timingCalls == beforeAutonomous + 1);
+
+  beginAt(0);
+  processBuddyEvent(BuddyEvent::TouchTap, 100);
+  processBuddyEvent(BuddyEvent::TouchTap, 101);
+  const uint32_t originalDeadline = nextAutonomousBehaviorAt;
+  const int beforeTransient = timingCalls;
+  updateBehaviorEngine(20000);  // Interaction still active; do not replace its schedule.
+  assert(currentMood == BuddyMood::Calm && activeReaction == BuddyReaction::Generic);
+  // Existing busy-deadline handling schedules on a reached deadline. Test transition
+  // deferral before that eligibility path by using a maximum Engaged interval below.
+  assert(timingCalls == beforeTransient + 1);  // Only the existing busy timeout reset.
+  assert(nextAutonomousBehaviorAt != originalDeadline);
+
+  timingTicket = TimingTicket::Maximum;
+  beginAt(0);
+  seedMood(BuddyMood::Engaged, 0);
+  processBuddyEvent(BuddyEvent::SoundDetected, 1);  // 45 points, deadline 24001.
+  const int beforeDeferred = timingCalls;
+  const uint32_t deferredDeadline = nextAutonomousBehaviorAt;
+  updateBehaviorEngine(20000);  // 35 points, Calm; deadline not yet due.
+  assert(currentMood == BuddyMood::Calm && activeReaction == BuddyReaction::Generic);
+  assert(nextAutonomousBehaviorAt == deferredDeadline && timingCalls == beforeDeferred);
+  finishAt(20001);
+  expectScheduled(20001, 45000);
+  assert(timingCalls == beforeDeferred + 1);
 }
 #endif
 }  // namespace
@@ -220,7 +323,17 @@ int main() {
   testRanges();
 #if !DESK_BUDDY_DIAGNOSTICS
   testStartupInteractionsAndCompletion();
-  testSleepWakeAndNoDecayReschedule();
+  testSleepWakeAndDecayReschedule();
   testRolloverDeadlines();
+  testMoodTransitionReschedulingAndRandomCalls();
+  testActiveReactionDefersTransitionSchedule();
+#else
+  beginAt(0);
+  const int beforeDiagnostic = timingCalls;
+  for (BuddyMood mood : {BuddyMood::Calm, BuddyMood::Engaged, BuddyMood::Grumpy, BuddyMood::Sleepy}) {
+    setDiagnosticMood(mood, 100);
+    updateBehaviorEngine(200);
+    assert(!autonomousBehaviorScheduled && timingCalls == beforeDiagnostic);
+  }
 #endif
 }
