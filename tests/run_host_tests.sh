@@ -90,7 +90,8 @@ run_test "BuddyMood lifecycle" mood_lifecycle \
 
 run_test "weighted autonomous selection" autonomous_weighted_selection \
   -DDESK_BUDDY_DIAGNOSTICS=1 \
-  "${REPO_ROOT}/tests/autonomous_weighted_selection_test.cpp"
+  "${REPO_ROOT}/tests/autonomous_weighted_selection_test.cpp" \
+  "${REPO_ROOT}/Diagnostics.cpp"
 
 run_test "production autonomous timing" autonomous_timing \
   "${REPO_ROOT}/tests/autonomous_timing_test.cpp"

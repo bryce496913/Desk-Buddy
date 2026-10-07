@@ -2,6 +2,9 @@
 #include <cstdint>
 #include "autonomous_test_helpers.h"
 #include "SoundEngine.h"
+#include "Diagnostics.h"
+#include <limits>
+HardwareSerial Serial;
 #include "../BehaviorEngine.cpp"
 
 namespace {
@@ -181,6 +184,83 @@ void testNewAutonomyStateIsolation() {
   processBuddyEvent(BuddyEvent::SoundDetected, 103);
   expectReaction(FaceExpression::Confused, ReactionSound::Confused);  // Still sees Tap.
 }
+void command(const char* text, uint32_t now) {
+  for (const char* p = text; *p; ++p) { Serial.push(*p); updateDiagnostics(now); }
+}
+void testDiagnosticProductionAutonomy() {
+  for (BuddyMood mood : moods) {
+    for (long ticket = 0; ticket < 100; ++ticket) {
+      beginSelectionAt(100); setDiagnosticMood(mood, 100);
+      requestedTicket = ticket;
+      const auto production = selectAutonomousBehavior(mood);
+      const auto expected = planForAutonomousBehavior(production).expression;
+      beginSelectionAt(100); setDiagnosticMood(mood, 100);
+      requestedTicket = ticket;
+      // Deliberately future deadline: ea must not wait or enable background scheduling.
+      nextAutonomousBehaviorAt = 200000;
+      const int before = randomCalls;
+      Serial.clearOutput(); command("ea", 100);
+      assert(expression == expected && lastAutonomousBehavior == production && hasLastAutonomousBehavior);
+      assert(getBuddyMood() == mood && randomCalls == before + 1 && observedTotal == 100);
+      assert(sound == ReactionSound::None && !soundActive && !autonomousBehaviorScheduled);
+      assert(Serial.output.find("DIAG AUTO: Mood =") == 0);
+      assert(Serial.output.find("Selected =") != std::string::npos);
+    }
+  }
+  beginSelectionAt(100); requestedTicket = 0;
+  command("ea", 100); assert(lastAutonomousBehavior == AutonomousBehavior::Daydreaming);
+  command("a3", 101); assert(expression == FaceExpression::SideGlance);
+  assert(lastAutonomousBehavior == AutonomousBehavior::Daydreaming);
+  command("ea", 102); assert(lastAutonomousBehavior == AutonomousBehavior::SideGlance && observedTotal == 70);
+  command("ea", 103); assert(lastAutonomousBehavior == AutonomousBehavior::Daydreaming && observedTotal == 75);
+
+  for (BuddySoundMode mode : {BuddySoundMode::Normal, BuddySoundMode::Quiet}) {
+    beginSelectionAt(100);
+    processBuddyEvent(BuddyEvent::TouchTap, 100);
+    processBuddyEvent(BuddyEvent::SoundDetected, 101);
+    setDiagnosticSoundMode(mode);
+    const auto before = getDiagnosticMoodState(102);
+    const auto memory = getDiagnosticRecentInteractionContext(102);
+    const auto touchCount = touchStreak; const auto soundCount = soundStreak;
+    const auto touchAt = lastTouchAt; const auto soundAt = lastSoundAt;
+    const auto activity = lastMeaningfulActivityAt;
+    const int starts = faceStarts;
+    requestedTicket = 0; command("ea", 102);
+    assert(faceStarts == starts + 1 && getBuddyReaction() == BuddyReaction::Generic && !soundActive);
+    assert(sound == ReactionSound::None && getBuddySoundMode() == mode);
+    const auto after = getDiagnosticMoodState(102);
+    assert(before.mood == after.mood && before.engagementScore == after.engagementScore &&
+           before.irritationScore == after.irritationScore && before.inactivityMs == after.inactivityMs);
+    const auto afterMemory = getDiagnosticRecentInteractionContext(102);
+    assert(memory.type == afterMemory.type && memory.ageMs == afterMemory.ageMs && memory.recent == afterMemory.recent);
+    assert(touchStreak == touchCount && soundStreak == soundCount && lastTouchAt == touchAt &&
+           lastSoundAt == soundAt && lastMeaningfulActivityAt == activity);
+    finishAt(103); const int finishedStarts = faceStarts;
+    updateBehaviorEngine(5000); assert(faceStarts == finishedStarts && !autonomousBehaviorScheduled);
+  }
+  beginSelectionAt(100);
+  processBuddyEvent(BuddyEvent::TouchTap, 100); // Active audio/Generic must not block Sleepy evaluation.
+  command("ea", 90100);
+  assert(getBuddyMood() == BuddyMood::Sleepy && expression == FaceExpression::SleepyDrift);
+  assert(lastMeaningfulActivityAt == 100 && engagementScore == 0);
+  beginSelectionAt(100); setDiagnosticMood(BuddyMood::Engaged, 100);
+  command("ea", 10100); // Score decay crosses Engaged threshold before selecting.
+  assert(getBuddyMood() == BuddyMood::Calm && engagementScore == 35 && expression == FaceExpression::Daydreaming);
+  constexpr uint32_t wrap = std::numeric_limits<uint32_t>::max() - 200;
+  beginSelectionAt(wrap); setDiagnosticMood(BuddyMood::Engaged, wrap);
+  command("ea", wrap + uint32_t{10000});
+  assert(getBuddyMood() == BuddyMood::Calm && engagementScore == 35);
+
+  beginSelectionAt(100); command("ea", 100);
+  processBuddyEvent(BuddyEvent::ButtonShortPress, 101);
+  const auto previous = lastAutonomousBehavior;
+  const int starts = faceStarts; const int draws = randomCalls;
+  const auto activity = lastMeaningfulActivityAt;
+  Serial.clearOutput(); command("ea", 200000);
+  assert(Serial.output == "DIAG: Autonomous event ignored while sleeping\n");
+  assert(getBuddyCoreState() == BuddyCoreState::Sleeping && faceStarts == starts && randomCalls == draws);
+  assert(lastAutonomousBehavior == previous && lastMeaningfulActivityAt == activity);
+}
 }  // namespace
 
 long random(long maximum) {
@@ -224,8 +304,12 @@ void playWakeSound() {}
 void ignoreSoundSensorAfterWake() {}
 
 int main() {
+  testDiagnosticProductionAutonomy();
   testExactWeightsAndExclusions();
   testCrossMoodExclusion();
   testNaturalMoodTransitionsAndPreemption();
   testNewAutonomyStateIsolation();
 }
+
+DiagnosticSoundSelection getDiagnosticSoundSelection() { return {false, ReactionSound::None, BuddyMood::Calm, 0}; }
+DiagnosticSoundWeights getDiagnosticSoundWeights(ReactionSound, BuddyMood) { return {{1,1,1}}; }

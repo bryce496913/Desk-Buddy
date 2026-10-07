@@ -330,11 +330,15 @@ int main() {
   Serial.clearOutput(); sendCommand("eh");
   assert(lastEvent == BuddyEvent::TouchHold && Serial.output == "DIAG EVENT: TouchHold\n");
   Serial.clearOutput(); sendCommand("exm?");
-  assert(Serial.output.find("DIAG: Invalid event command (use e?, et or eh)\n") == 0);
+  assert(Serial.output.find("DIAG: Invalid event command (use e?, et, eh or ea)\n") == 0);
   assert(Serial.output.find("DIAG: Mood =") != std::string::npos);
   const int afterEvents = eventCalls;
   sendCommand("e \nT"); assert(eventCalls == afterEvents + 1 && lastEvent == BuddyEvent::TouchTap);
+  Serial.clearOutput(); sendCommand("ea");
+  assert(Serial.output.find("DIAG AUTO: Mood =") == 0 && Serial.output.find("Selected = Bored") != std::string::npos);
   coreState = BuddyCoreState::Sleeping;
+  Serial.clearOutput(); sendCommand("ea");
+  assert(Serial.output == "DIAG: Autonomous event ignored while sleeping\n");
   Serial.clearOutput(); sendCommand("eh");
   assert(Serial.output == "DIAG: Event ignored while sleeping\n");
   assert(coreState == BuddyCoreState::Sleeping);
@@ -349,3 +353,9 @@ DiagnosticSoundWeights getDiagnosticSoundWeights(ReactionSound, BuddyMood) { ret
 BuddySoundMode parserSoundMode = BuddySoundMode::Normal;
 BuddySoundMode getBuddySoundMode() { return parserSoundMode; }
 void setDiagnosticSoundMode(BuddySoundMode mode) { parserSoundMode = mode; }
+
+bool triggerDiagnosticAutonomousEvent(uint32_t, DiagnosticAutonomousBehavior& selected) {
+  if (coreState == BuddyCoreState::Sleeping) return false;
+  selected = DiagnosticAutonomousBehavior::Bored;
+  return true;
+}

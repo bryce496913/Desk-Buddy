@@ -32,6 +32,8 @@ enum class DiagnosticAutonomousBehavior : uint8_t {
 bool triggerDiagnosticAutonomousBehavior(DiagnosticAutonomousBehavior behavior,
                                          uint32_t now);
 
+bool triggerDiagnosticAutonomousEvent(uint32_t now, DiagnosticAutonomousBehavior &selected);
+
 enum class DiagnosticReaction : uint8_t {
   Normal,
   Happy,
