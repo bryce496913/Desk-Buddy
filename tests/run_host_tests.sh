@@ -153,4 +153,9 @@ run_test "Mood evolution simulation" mood_evolution_simulation \
   "${REPO_ROOT}/tests/mood_evolution_simulation_test.cpp" \
   "${REPO_ROOT}/tests/BuddyLifeSimulator.cpp" "${REPO_ROOT}/BehaviorEngine.cpp"
 
+run_test "Buddy life long-run simulation" buddy_life_long_run \
+  -DDESK_BUDDY_DIAGNOSTICS=1 -DDESK_BUDDY_TEST_LIFE_SIMULATOR=1 \
+  "${REPO_ROOT}/tests/buddy_life_long_run_test.cpp" \
+  "${REPO_ROOT}/tests/BuddyLifeSimulator.cpp" "${REPO_ROOT}/BehaviorEngine.cpp"
+
 printf '[PASS] all host tests\n'

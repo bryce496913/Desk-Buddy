@@ -43,3 +43,32 @@ actual engine's autonomous no-repeat history on initialization, so fresh runs
 are repeatable within one process. It has no effect on either firmware build.
 Snapshots use production getters and read-only diagnostic telemetry; recent
 interaction validity means it is still within the production context window.
+
+## Ordered event scripts and observation
+
+`ScheduledBuddyEvent` pairs an elapsed offset (`atMs`) with a
+`SimulatedBuddyEvent`. `runScript(events, count, endAt)` interprets both event
+and end offsets relative to its starting virtual time. This keeps scripts ordered
+across rollover. Use fixed arrays in chronological order; equal offsets preserve
+caller order. The helper validates the entire script before any mutation and
+returns false for unordered offsets, events past the end, invalid event values,
+or a null pointer with nonzero count. It does not sort or allocate.
+
+All six interaction/event kinds dispatch through the existing simulator methods.
+`Checkpoint` provides a named observation without injecting a production event.
+An empty script can simply advance to an elapsed end offset.
+
+`setObserver(callback, context)` installs a function pointer and optional opaque
+context pointer. It runs after reset, every update tick (including zero-duration
+advances), and every event/checkpoint, with a read-only snapshot and event label.
+Observers must not mutate the simulator or BehaviorEngine. They persist across
+reset until replaced or cleared with `setObserver(nullptr)`; their context must
+outlive every observed operation.
+
+The long-run regression uses fixed-capacity traces to compare a ten-minute Quiet
+story against a matching Normal control after every observation. It checks
+production state invariants continuously and provides timestamp, event, mood,
+scores, expression, audio, and memory context only on failure. A second story
+starts at UINT32_MAX - 120000 and covers 211000 elapsed ms. Random selector
+values are explicitly queued; exhaustion retains the documented deterministic
+zero/minimum fallback. Sound variants remain outside the activity stub's scope.
