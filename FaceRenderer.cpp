@@ -66,6 +66,7 @@ uint32_t reactionExitStartedAt = 0;
 bool reactionEntryTransitionActive = false;
 uint32_t reactionEntryStartedAt = 0;
 bool sideGlanceRight = false;
+bool curiousShiftRight = false;
 FaceExpression activeExpression = FaceExpression::Normal;
 uint32_t lastFrameAt = 0;
 int backlightCurrent = 255;
@@ -163,11 +164,47 @@ float reactionProgress01(uint32_t now) {
 }
 
 EyeExpressionParams applyReactionMicroAnimation(
-    FaceExpression expression, bool /*isLeftEye*/, uint32_t /*now*/,
+    FaceExpression expression, bool isLeftEye, uint32_t now,
     EyeExpressionParams params) {
   if (expression == FaceExpression::Normal) return params;
-  // Future expression adjustments use presentation progress and procedural curves
-  // here. This infrastructure pass deliberately preserves every existing target.
+  const float progress = reactionPresentationProgress01(now);
+  switch (expression) {
+    case FaceExpression::Happy: {
+      const float bounce = smoothPulse(progress);
+      params.pupilBiasY -= int(lroundf(3.0f * bounce));
+      params.bottomLid += 0.03f * bounce;
+      break;
+    }
+    case FaceExpression::Curious: {
+      const float shift = smoothstep01((progress - 0.35f) / 0.25f);
+      params.pupilBiasX += (curiousShiftRight ? 1 : -1) * int(lroundf(5.0f * shift));
+      break;
+    }
+    case FaceExpression::Annoyed: {
+      const float tighten = smoothstep01(progress / 0.5f);
+      params.topLid += 0.08f * tighten;
+      params.bottomLid += 0.03f * tighten;
+      break;
+    }
+    case FaceExpression::Confused: {
+      const float diverge = smoothstep01((progress - 0.30f) / 0.35f);
+      params.pupilBiasX += (isLeftEye ? -1 : 1) * int(lroundf(3.0f * diverge));
+      break;
+    }
+    case FaceExpression::Startled: {
+      const float settle = smoothstep01(progress);
+      params.topLid += 0.08f * settle;
+      params.bottomLid += 0.05f * settle;
+      params.pupilRadius += int(lroundf(2.0f * settle));
+      params.irisRadius += int(lroundf(settle));
+      params.showSpark = progress < 0.40f;
+      break;
+    }
+    default:
+      return params;
+  }
+  params.topLid = clampf(params.topLid, 0.0f, 1.0f);
+  params.bottomLid = clampf(params.bottomLid, 0.0f, 1.0f);
   return params;
 }
 
@@ -357,6 +394,7 @@ void startFaceReaction(uint32_t now, FaceExpression expression) {
   reactionStartedAt = now;
   reactUntil = now + REACTION_DURATION_MS;
   if (expression == FaceExpression::SideGlance) sideGlanceRight = !sideGlanceRight;
+  if (expression == FaceExpression::Curious) curiousShiftRight = !curiousShiftRight;
   activeExpression = expression;
   // Apparent ambient pupil position is frozen in the source snapshots.
   pupilX = 0;
