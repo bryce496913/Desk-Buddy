@@ -19,6 +19,15 @@ void playSleepSound();
 void playWakeSound();
 void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood);
 #if DESK_BUDDY_DIAGNOSTICS
+struct DiagnosticSoundSelection {
+  bool valid;
+  ReactionSound sound;
+  BuddyMood mood;
+  uint8_t variantIndex;
+};
+struct DiagnosticSoundWeights { uint8_t values[3]; };
+DiagnosticSoundSelection getDiagnosticSoundSelection();
+DiagnosticSoundWeights getDiagnosticSoundWeights(ReactionSound sound, BuddyMood mood);
 constexpr uint8_t DIAGNOSTIC_RANDOM_VARIANT = UINT8_MAX;
 bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,
                                   uint8_t requestedVariantIndex,

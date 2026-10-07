@@ -185,3 +185,8 @@ int main() {
     checkDraw(visualExpressionParams(1000 + elapsed, BuddyReaction::Generic, true));
   assert(pupilX == 0 && pupilY == 0);
 }
+
+DiagnosticSoundSelection getDiagnosticSoundSelection() {
+  return {false, ReactionSound::None, BuddyMood::Calm, 0};
+}
+DiagnosticSoundWeights getDiagnosticSoundWeights(ReactionSound, BuddyMood) { return {{1, 1, 1}}; }

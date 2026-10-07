@@ -112,6 +112,11 @@ run_test "diagnostic weighted sound variants" sound_variant_selection_diagnostic
   -DDESK_BUDDY_DIAGNOSTICS=1 \
   "${REPO_ROOT}/tests/sound_variant_selection_test.cpp"
 
+run_test "SoundEngine diagnostics integration and playback" sound_diagnostics_integration \
+  -DDESK_BUDDY_DIAGNOSTICS=1 \
+  "${REPO_ROOT}/tests/sound_diagnostics_integration_test.cpp" \
+  "${REPO_ROOT}/BehaviorEngine.cpp" "${REPO_ROOT}/Diagnostics.cpp"
+
 # Link Diagnostics.cpp separately so missing direct includes fail as they do in Arduino.
 run_test "diagnostic Serial parser" diagnostics_parser \
   -DDESK_BUDDY_DIAGNOSTICS=1 \

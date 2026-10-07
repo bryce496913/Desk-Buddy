@@ -12,6 +12,7 @@ bool moodSelectorPending = false;
 bool interactionSelectorPending = false;
 bool autonomousSelectorPending = false;
 bool timingSelectorPending = false;
+bool soundSelectorPending = false;
 const char* const autonomousNames[] = {
     "Curious", "Daydreaming", "SideGlance", "Bored", "SuspiciousGlance",
     "AnnoyedSquint", "SleepyDrift", "ExcitedScanning"};
@@ -105,7 +106,43 @@ const char* variantName(DiagnosticSoundVariant variant) {
   return "Unknown";
 }
 
+const char* soundName(ReactionSound sound) {
+  switch (sound) {
+    case ReactionSound::Happy: return "Happy";
+    case ReactionSound::Curious: return "Curious";
+    case ReactionSound::Annoyed: return "Annoyed";
+    case ReactionSound::Startled: return "Startled";
+    case ReactionSound::Suspicious: return "Suspicious";
+    case ReactionSound::Confused: return "Confused";
+    default: return "None";
+  }
+}
+void printSoundSelection() {
+  const auto selection = getDiagnosticSoundSelection();
+  Serial.print("DIAG: Sound = ");
+  if (!selection.valid) { Serial.println("None"); return; }
+  Serial.print(soundName(selection.sound));
+  Serial.print(" | Mood = "); Serial.print(moodName(selection.mood));
+  Serial.print(" | Variant = ");
+  Serial.println(static_cast<unsigned int>(selection.variantIndex + 1));
+}
+void printSoundWeights() {
+  const BuddyMood mood = getBuddyMood();
+  Serial.print("DIAG SOUND WEIGHTS - "); Serial.println(moodName(mood));
+  const ReactionSound families[] = {ReactionSound::Happy, ReactionSound::Curious,
+       ReactionSound::Annoyed, ReactionSound::Startled, ReactionSound::Suspicious,
+       ReactionSound::Confused};
+  for (ReactionSound sound : families) {
+    const auto weights = getDiagnosticSoundWeights(sound, mood);
+    Serial.print(soundName(sound)); Serial.print(" ");
+    Serial.print(static_cast<unsigned int>(weights.values[0])); Serial.print(" / ");
+    Serial.print(static_cast<unsigned int>(weights.values[1])); Serial.print(" / ");
+    Serial.println(static_cast<unsigned int>(weights.values[2]));
+  }
+}
+
 void printDiagnosticHelp() {
+  Serial.println("s?: Last random sound selection | sw: Current mood sound weights");
   Serial.println("Desk Buddy diagnostics");
   Serial.println();
   Serial.println("Reactions:");
@@ -163,6 +200,14 @@ void updateDiagnostics(uint32_t now) {
 
   const char command = static_cast<char>(Serial.read());
   if (command == '\r' || command == '\n' || command == ' ') return;
+
+  if (soundSelectorPending) {
+    soundSelectorPending = false;
+    if (command == '?') printSoundSelection();
+    else if (command == 'w' || command == 'W') printSoundWeights();
+    else Serial.println("DIAG: Invalid sound command (use s? or sw)");
+    return;
+  }
 
   if (timingSelectorPending) {
     timingSelectorPending = false;
@@ -247,6 +292,10 @@ void updateDiagnostics(uint32_t now) {
   }
   if (command == 'a' || command == 'A') {
     autonomousSelectorPending = true;
+    return;
+  }
+  if (command == 's' || command == 'S') {
+    soundSelectorPending = true;
     return;
   }
   if (command == 't' || command == 'T') {

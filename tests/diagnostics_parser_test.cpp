@@ -4,6 +4,7 @@
 
 #include "Arduino.h"
 #include "Diagnostics.h"
+#include "SoundEngine.h"
 #include "BehaviorEngine.h"
 
 HardwareSerial Serial;
@@ -303,3 +304,8 @@ int main() {
   assert(lastVariant == DiagnosticSoundVariant::Variant1);
   return 0;
 }
+
+DiagnosticSoundSelection getDiagnosticSoundSelection() {
+  return {false, ReactionSound::None, BuddyMood::Calm, 0};
+}
+DiagnosticSoundWeights getDiagnosticSoundWeights(ReactionSound, BuddyMood) { return {{1, 1, 1}}; }
