@@ -53,11 +53,14 @@ int main() {
     assert(smoothPulse(p) >= 0 && smoothPulse(p) <= 1);
     near(smoothPulse(p), smoothPulse(1 - p));
   }
-  // All existing targets pass through the new stage without any visible retuning.
+  // Expressions outside the five interactive micro-animations remain unchanged.
   reactionStartedAt = 1000;
   lidAmount = 0.37f;
   for (uint8_t value = 0; value <= static_cast<uint8_t>(FaceExpression::AnnoyedSquint); ++value) {
     const auto expression = static_cast<FaceExpression>(value);
+    if (expression == FaceExpression::Happy || expression == FaceExpression::Curious ||
+        expression == FaceExpression::Annoyed || expression == FaceExpression::Confused ||
+        expression == FaceExpression::Startled) continue;
     for (bool left : {false, true}) {
       for (uint32_t elapsed : {0u, 90u, 180u, 900u, 1188u, 1800u, 2200u}) {
         const uint32_t now = 1000 + elapsed;
