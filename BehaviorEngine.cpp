@@ -8,8 +8,14 @@ namespace {
 constexpr uint32_t TOUCH_REPEAT_WINDOW_MS = 6000;
 constexpr uint32_t SOUND_REPEAT_WINDOW_MS = 10000;
 constexpr uint32_t CROSS_INTERACTION_WINDOW_MS = 5000;
-constexpr uint32_t AUTONOMOUS_BEHAVIOR_MIN_MS = 20000;
-constexpr uint32_t AUTONOMOUS_BEHAVIOR_MAX_MS = 40001;
+constexpr uint32_t ENGAGED_AUTONOMOUS_MIN_MS = 12000;
+constexpr uint32_t ENGAGED_AUTONOMOUS_MAX_MS = 24000;
+constexpr uint32_t GRUMPY_AUTONOMOUS_MIN_MS = 20000;
+constexpr uint32_t GRUMPY_AUTONOMOUS_MAX_MS = 35000;
+constexpr uint32_t CALM_AUTONOMOUS_MIN_MS = 28000;
+constexpr uint32_t CALM_AUTONOMOUS_MAX_MS = 45000;
+constexpr uint32_t SLEEPY_AUTONOMOUS_MIN_MS = 45000;
+constexpr uint32_t SLEEPY_AUTONOMOUS_MAX_MS = 70000;
 constexpr uint8_t MAX_MOOD_SCORE = 100;
 constexpr uint8_t ENGAGED_THRESHOLD = 40;
 constexpr uint8_t GRUMPY_THRESHOLD = 60;
@@ -200,15 +206,30 @@ bool timeReached(uint32_t now, uint32_t deadline) {
   return static_cast<int32_t>(now - deadline) >= 0;
 }
 
+struct AutonomousTimingRange {
+  uint32_t minMs;
+  uint32_t maxMs;  // Inclusive; Arduino random() requires maxMs + 1.
+};
+
+AutonomousTimingRange autonomousTimingFor(BuddyMood mood) {
+  switch (mood) {
+    case BuddyMood::Engaged: return {ENGAGED_AUTONOMOUS_MIN_MS, ENGAGED_AUTONOMOUS_MAX_MS};
+    case BuddyMood::Grumpy: return {GRUMPY_AUTONOMOUS_MIN_MS, GRUMPY_AUTONOMOUS_MAX_MS};
+    case BuddyMood::Sleepy: return {SLEEPY_AUTONOMOUS_MIN_MS, SLEEPY_AUTONOMOUS_MAX_MS};
+    case BuddyMood::Calm: return {CALM_AUTONOMOUS_MIN_MS, CALM_AUTONOMOUS_MAX_MS};
+  }
+  return {CALM_AUTONOMOUS_MIN_MS, CALM_AUTONOMOUS_MAX_MS};
+}
+
 void scheduleNextAutonomousBehavior(uint32_t now) {
+  const AutonomousTimingRange range = autonomousTimingFor(currentMood);
 #if DESK_BUDDY_DIAGNOSTICS
   (void)now;
+  (void)range;
   nextAutonomousBehaviorAt = 0;
   autonomousBehaviorScheduled = false;
 #else
-  nextAutonomousBehaviorAt =
-      now + static_cast<uint32_t>(
-                random(AUTONOMOUS_BEHAVIOR_MIN_MS, AUTONOMOUS_BEHAVIOR_MAX_MS));
+  nextAutonomousBehaviorAt = now + static_cast<uint32_t>(random(range.minMs, range.maxMs + 1));
   autonomousBehaviorScheduled = true;
 #endif
 }
@@ -333,7 +354,6 @@ void handleTapInteraction(uint32_t now) {
     const BuddyMood reactionMood = currentMood;
     lastMeaningfulActivityAt = now;
     autonomousReactionActive = false;
-    scheduleNextAutonomousBehavior(now);
     if (touchStreak == 0 ||
         static_cast<uint32_t>(now - lastTouchAt) >
             TOUCH_REPEAT_WINDOW_MS) {
@@ -352,6 +372,7 @@ void handleTapInteraction(uint32_t now) {
       increaseScore(irritationScore, 25);
     }
     updateMoodState(now);
+    scheduleNextAutonomousBehavior(now);
 
     const ReactionPlan plan = selectTapReaction(reactionMood, touchStreak, previous);
     recordRecentInteraction(RecentInteractionType::TouchTap, now);
@@ -366,10 +387,10 @@ void handleHoldInteraction(uint32_t now) {
   const BuddyMood reactionMood = currentMood;
   lastMeaningfulActivityAt = now;
   autonomousReactionActive = false;
-  scheduleNextAutonomousBehavior(now);
   increaseScore(engagementScore, 30);
   decreaseScore(irritationScore, 15);
   updateMoodState(now);
+  scheduleNextAutonomousBehavior(now);
 
   const ReactionPlan plan = selectHoldReaction(reactionMood, previous);
   recordRecentInteraction(RecentInteractionType::TouchHold, now);
@@ -398,11 +419,11 @@ void wakeBuddy(uint32_t now) {
   activeReaction = BuddyReaction::Idle;
   resetSoundHistory();
   autonomousReactionActive = false;
-  scheduleNextAutonomousBehavior(now);
   wakeFace(now);
   playWakeSound();
   ignoreSoundSensorAfterWake();
   updateMoodState(now);
+  scheduleNextAutonomousBehavior(now);
 }
 }  // namespace
 
@@ -423,6 +444,7 @@ void beginBehaviorEngine(uint32_t now) {
 }
 
 void updateBehaviorEngine(uint32_t now) {
+  bool autonomousCompleted = false;
   const bool scoresDecayed =
       coreState == BuddyCoreState::Awake && decayMoodScores(now);
 
@@ -431,7 +453,7 @@ void updateBehaviorEngine(uint32_t now) {
     finishFaceReaction(now);
     if (autonomousReactionActive) {
       autonomousReactionActive = false;
-      scheduleNextAutonomousBehavior(now);
+      autonomousCompleted = true;
     }
   }
 
@@ -443,6 +465,8 @@ void updateBehaviorEngine(uint32_t now) {
                             SLEEPY_AFTER_INACTIVITY_MS)) {
     updateMoodState(now);
   }
+
+  if (autonomousCompleted) scheduleNextAutonomousBehavior(now);
 
   if (coreState == BuddyCoreState::Awake && autonomousBehaviorScheduled &&
       timeReached(now, nextAutonomousBehaviorAt)) {
