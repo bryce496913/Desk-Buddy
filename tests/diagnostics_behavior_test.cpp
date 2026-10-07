@@ -40,7 +40,7 @@ void finishFaceReaction(uint32_t) { lastExpression = FaceExpression::Normal; }
 void enterSleepFace(uint32_t) { sleepFaceEntries++; }
 void wakeFace(uint32_t) { wakeFaceRequests++; }
 
-void startReactionSound(uint32_t, ReactionSound sound) {
+void startReactionSound(uint32_t, ReactionSound sound, BuddyMood) {
   lastSound = sound;
   soundReactionStarts++;
   soundActive = sound != ReactionSound::None;
@@ -51,13 +51,13 @@ bool startDiagnosticReactionSound(uint32_t, ReactionSound sound,
   lastRequestedVariant = requestedVariantIndex;
   if (sound == ReactionSound::None) {
     selectedVariantIndex = DIAGNOSTIC_RANDOM_VARIANT;
-    startReactionSound(0, sound);
+    startReactionSound(0, sound, BuddyMood::Calm);
     return true;
   }
   selectedVariantIndex = requestedVariantIndex == DIAGNOSTIC_RANDOM_VARIANT
       ? 2
       : requestedVariantIndex;
-  startReactionSound(0, sound);
+  startReactionSound(0, sound, BuddyMood::Calm);
   return selectedVariantIndex < 3;
 }
 void stopReactionSound() {

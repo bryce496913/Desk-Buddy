@@ -342,11 +342,11 @@ void resetSoundHistory() {
 }
 
 void startGenericReaction(uint32_t now, FaceExpression expression,
-                          ReactionSound sound) {
+                          ReactionSound sound, BuddyMood reactionMood) {
   stopReactionSound();
   activeReaction = BuddyReaction::Generic;
   startFaceReaction(now, expression);
-  startReactionSound(now, sound);
+  startReactionSound(now, sound, reactionMood);
 }
 
 void handleTapInteraction(uint32_t now) {
@@ -378,7 +378,7 @@ void handleTapInteraction(uint32_t now) {
 
     const ReactionPlan plan = selectTapReaction(reactionMood, touchStreak, previous);
     recordRecentInteraction(RecentInteractionType::TouchTap, now);
-    startGenericReaction(now, plan.expression, plan.sound);
+    startGenericReaction(now, plan.expression, plan.sound, reactionMood);
   }
 }
 
@@ -396,7 +396,7 @@ void handleHoldInteraction(uint32_t now) {
 
   const ReactionPlan plan = selectHoldReaction(reactionMood, previous);
   recordRecentInteraction(RecentInteractionType::TouchHold, now);
-  startGenericReaction(now, plan.expression, plan.sound);
+  startGenericReaction(now, plan.expression, plan.sound, reactionMood);
 }
 
 void enterSleep(uint32_t now) {
@@ -525,7 +525,7 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
 
         const ReactionPlan plan = selectSoundReaction(reactionMood, soundStreak, previous);
         recordRecentInteraction(RecentInteractionType::Sound, now);
-        startGenericReaction(now, plan.expression, plan.sound);
+        startGenericReaction(now, plan.expression, plan.sound, reactionMood);
       }
       break;
     case BuddyEvent::IdleTimeout:
@@ -538,7 +538,7 @@ void processBuddyEvent(BuddyEvent event, uint32_t now) {
         autonomousReactionActive = true;
         const AutonomousBehavior behavior = selectAutonomousBehavior(currentMood);
         const AutonomousBehaviorPlan plan = planForAutonomousBehavior(behavior);
-        startGenericReaction(now, plan.expression, plan.sound);
+        startGenericReaction(now, plan.expression, plan.sound, currentMood);
       }
       break;
   }
@@ -581,7 +581,7 @@ bool triggerDiagnosticAutonomousBehavior(DiagnosticAutonomousBehavior requested,
   autonomousReactionActive = false;
   disableAutonomousBehavior();
   const AutonomousBehaviorPlan plan = planForAutonomousBehavior(behavior);
-  startGenericReaction(now, plan.expression, plan.sound);
+  startGenericReaction(now, plan.expression, plan.sound, currentMood);
   return true;
 }
 

@@ -105,6 +105,13 @@ run_test "cross interaction" cross_interaction \
   "${REPO_ROOT}/BehaviorEngine.cpp" \
   "${REPO_ROOT}/Diagnostics.cpp"
 
+run_test "production weighted sound variants" sound_variant_selection \
+  "${REPO_ROOT}/tests/sound_variant_selection_test.cpp"
+
+run_test "diagnostic weighted sound variants" sound_variant_selection_diagnostics \
+  -DDESK_BUDDY_DIAGNOSTICS=1 \
+  "${REPO_ROOT}/tests/sound_variant_selection_test.cpp"
+
 # Link Diagnostics.cpp separately so missing direct includes fail as they do in Arduino.
 run_test "diagnostic Serial parser" diagnostics_parser \
   -DDESK_BUDDY_DIAGNOSTICS=1 \

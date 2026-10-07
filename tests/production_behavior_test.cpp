@@ -399,7 +399,7 @@ void finishFaceReaction(uint32_t) {
 void enterSleepFace(uint32_t) { sleepFaceEntries++; }
 void wakeFace(uint32_t) { wakeFaceRequests++; }
 
-void startReactionSound(uint32_t, ReactionSound sound) {
+void startReactionSound(uint32_t, ReactionSound sound, BuddyMood) {
   requestedSound = sound;
   soundEngineActive = sound != ReactionSound::None;
   soundReactionStarts++;

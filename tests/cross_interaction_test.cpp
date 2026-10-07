@@ -254,7 +254,7 @@ void finishFaceReaction(uint32_t) {
 }
 void enterSleepFace(uint32_t) {}
 void wakeFace(uint32_t) {}
-void startReactionSound(uint32_t, ReactionSound requested) {
+void startReactionSound(uint32_t, ReactionSound requested, BuddyMood) {
   sound = requested;
   soundActive = sound != ReactionSound::None;
   ++soundStarts;
@@ -262,7 +262,7 @@ void startReactionSound(uint32_t, ReactionSound requested) {
 bool startDiagnosticReactionSound(uint32_t now, ReactionSound requested,
                                   uint8_t, uint8_t &selected) {
   selected = requested == ReactionSound::None ? DIAGNOSTIC_RANDOM_VARIANT : 0;
-  startReactionSound(now, requested);
+  startReactionSound(now, requested, BuddyMood::Calm);
   return true;
 }
 void stopReactionSound() {

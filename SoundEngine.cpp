@@ -216,13 +216,36 @@ void startSequence(SoundSequence sequence, const SequenceDefinition &definition,
   phaseEndsAt = now;
 }
 
-uint8_t selectVariant(uint8_t count, uint8_t &lastVariant) {
-  uint8_t selected = static_cast<uint8_t>(random(count));
-  if (count > 1 && selected == lastVariant) {
-    selected = static_cast<uint8_t>((selected + 1 + random(count - 1)) % count);
+struct VariantWeights {
+  uint8_t values[3];
+};
+
+VariantWeights weightsFor(ReactionSound /*sound*/, BuddyMood /*mood*/) {
+  // Foundation: every family and mood has the same preference.
+  return {{1, 1, 1}};
+}
+
+uint8_t selectWeightedVariant(const VariantWeights &weights, uint8_t &lastVariant) {
+  uint16_t total = 0;
+  for (uint8_t weight : weights.values) total += weight;
+  const uint16_t previousWeight = lastVariant < 3 ? weights.values[lastVariant] : 0;
+  const bool excludePrevious = total > previousWeight;
+  if (excludePrevious) total -= previousWeight;
+  // Defensive empty-pool fallback; production weights always have alternatives.
+  if (total == 0) {
+    if (lastVariant >= 3) lastVariant = 0;
+    return lastVariant;
   }
-  lastVariant = selected;
-  return selected;
+  uint16_t ticket = static_cast<uint16_t>(random(total));
+  for (uint8_t index = 0; index < 3; ++index) {
+    if (excludePrevious && index == lastVariant) continue;
+    if (ticket < weights.values[index]) {
+      lastVariant = index;
+      return index;
+    }
+    ticket -= weights.values[index];
+  }
+  return lastVariant; // Unreachable for random(total)'s [0, total) contract.
 }
 }  // namespace
 
@@ -243,46 +266,46 @@ void playWakeSound() {
   startSequence(SoundSequence::Wake, WAKE_SEQUENCE, millis());
 }
 
-void startReactionSound(uint32_t now, ReactionSound sound) {
+void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood) {
   switch (sound) {
     case ReactionSound::None:
       stopReactionSound();
       break;
     case ReactionSound::Happy: {
-      uint8_t variant = selectVariant(HAPPY_VARIANT_COUNT, lastHappyVariant);
+      uint8_t variant = selectWeightedVariant(weightsFor(sound, mood), lastHappyVariant);
       startSequence(SoundSequence::HappyReaction,
                     HAPPY_REACTION_SEQUENCES[variant], now);
       break;
     }
     case ReactionSound::Curious: {
-      uint8_t variant = selectVariant(CURIOUS_VARIANT_COUNT, lastCuriousVariant);
+      uint8_t variant = selectWeightedVariant(weightsFor(sound, mood), lastCuriousVariant);
       startSequence(SoundSequence::CuriousReaction,
                     CURIOUS_REACTION_SEQUENCES[variant], now);
       break;
     }
     case ReactionSound::Annoyed: {
-      uint8_t variant = selectVariant(ANNOYED_VARIANT_COUNT, lastAnnoyedVariant);
+      uint8_t variant = selectWeightedVariant(weightsFor(sound, mood), lastAnnoyedVariant);
       startSequence(SoundSequence::AnnoyedReaction,
                     ANNOYED_REACTION_SEQUENCES[variant], now);
       break;
     }
     case ReactionSound::Startled: {
       uint8_t variant =
-          selectVariant(STARTLED_VARIANT_COUNT, lastStartledVariant);
+          selectWeightedVariant(weightsFor(sound, mood), lastStartledVariant);
       startSequence(SoundSequence::StartledReaction,
                     STARTLED_REACTION_SEQUENCES[variant], now);
       break;
     }
     case ReactionSound::Suspicious: {
       uint8_t variant =
-          selectVariant(SUSPICIOUS_VARIANT_COUNT, lastSuspiciousVariant);
+          selectWeightedVariant(weightsFor(sound, mood), lastSuspiciousVariant);
       startSequence(SoundSequence::SuspiciousReaction,
                     SUSPICIOUS_REACTION_SEQUENCES[variant], now);
       break;
     }
     case ReactionSound::Confused: {
       uint8_t variant =
-          selectVariant(CONFUSED_VARIANT_COUNT, lastConfusedVariant);
+          selectWeightedVariant(weightsFor(sound, mood), lastConfusedVariant);
       startSequence(SoundSequence::ConfusedReaction,
                     CONFUSED_REACTION_SEQUENCES[variant], now);
       break;
@@ -344,7 +367,8 @@ bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,
   }
 
   if (requestedVariantIndex == DIAGNOSTIC_RANDOM_VARIANT) {
-    selectedVariantIndex = selectVariant(variantCount, *lastVariant);
+    // Diagnostic mood propagation is deferred; all moods are equal in this pass.
+    selectedVariantIndex = selectWeightedVariant(weightsFor(sound, BuddyMood::Calm), *lastVariant);
   } else {
     if (requestedVariantIndex >= variantCount) return false;
     selectedVariantIndex = requestedVariantIndex;
