@@ -60,6 +60,9 @@ uint32_t reactUntil = 0;
 uint32_t reactionStartedAt = 0;
 constexpr uint32_t REACTION_DURATION_MS = 1800;
 constexpr uint32_t REACTION_ENTER_TRANSITION_MS = 180;
+constexpr uint32_t REACTION_EXIT_TRANSITION_MS = 220;
+bool reactionExitTransitionActive = false;
+uint32_t reactionExitStartedAt = 0;
 bool reactionEntryTransitionActive = false;
 uint32_t reactionEntryStartedAt = 0;
 bool sideGlanceRight = false;
@@ -110,10 +113,12 @@ struct EyeExpressionParams {
   bool showSpark;
 };
 EyeExpressionParams entryFromLeft{}, entryFromRight{};
+EyeExpressionParams exitFromLeft{}, exitFromRight{};
+EyeExpressionParams exitToLeft{}, exitToRight{};
 EyeExpressionParams renderedLeft{}, renderedRight{};
 bool hasRenderedEyes = false;
 
-// Foundation only: these helpers are not applied to rendered transitions yet.
+// Shared easing and geometry interpolation for reaction entry and exit.
 [[maybe_unused]] float smoothstep01(float t) {
   t = clampf(t, 0.0f, 1.0f);
   return t * t * (3.0f - 2.0f * t);
@@ -198,6 +203,12 @@ EyeExpressionParams expressionParams(FaceExpression expression, bool isLeftEye,
 
 EyeExpressionParams visualExpressionParams(uint32_t now, BuddyReaction reaction,
                                           bool isLeftEye) {
+  if (reactionExitTransitionActive) {
+    const float progress = smoothstep01(float(static_cast<uint32_t>(now - reactionExitStartedAt)) /
+                                       REACTION_EXIT_TRANSITION_MS);
+    return interpolateExpressionParams(isLeftEye ? exitFromLeft : exitFromRight,
+                                       isLeftEye ? exitToLeft : exitToRight, progress);
+  }
   EyeExpressionParams target = expressionParams(
       reaction == BuddyReaction::Generic ? activeExpression : FaceExpression::Normal,
       isLeftEye, now);
@@ -308,6 +319,7 @@ void scheduleFaceBehavior(uint32_t now) {
 void startFaceReaction(uint32_t now, FaceExpression expression) {
   entryFromLeft = hasRenderedEyes ? renderedLeft : visualExpressionParams(now, BuddyReaction::Idle, true);
   entryFromRight = hasRenderedEyes ? renderedRight : visualExpressionParams(now, BuddyReaction::Idle, false);
+  reactionExitTransitionActive = false;
   reactionEntryStartedAt = now;
   reactionEntryTransitionActive = true;
   reactionStartedAt = now;
@@ -323,11 +335,23 @@ void startFaceReaction(uint32_t now, FaceExpression expression) {
 }
 bool isFaceReactionFinished(uint32_t now) { return timeReached(now, reactUntil); }
 void finishFaceReaction(uint32_t now) {
+  exitFromLeft = hasRenderedEyes ? renderedLeft : visualExpressionParams(now, BuddyReaction::Generic, true);
+  exitFromRight = hasRenderedEyes ? renderedRight : visualExpressionParams(now, BuddyReaction::Generic, false);
   reactionEntryTransitionActive = false;
   activeExpression = FaceExpression::Normal;
-  scheduleFaceBehavior(now);
+  // Freeze a relaxed, centered idle destination and discard stale micro-actions.
+  blinkActive = false;
+  drowsyUntil = now;
+  lidAmount = 0;
+  pupilX = pupilY = pupilTargetX = pupilTargetY = 0;
+  exitToLeft = expressionParams(FaceExpression::Normal, true, now);
+  exitToRight = expressionParams(FaceExpression::Normal, false, now);
+  reactionExitStartedAt = now;
+  reactionExitTransitionActive = true;
+  // Fresh idle deadlines are scheduled only after the visual exit completes.
 }
 void enterSleepFace(uint32_t) {
+  reactionExitTransitionActive = false;
   reactionEntryTransitionActive = false;
   backlightTarget = 40;
   blinkActive = false;
@@ -335,6 +359,7 @@ void enterSleepFace(uint32_t) {
   activeExpression = FaceExpression::Normal;
 }
 void wakeFace(uint32_t now) {
+  reactionExitTransitionActive = false;
   reactionEntryTransitionActive = false;
   backlightTarget = 255;
   blinkActive = true;
@@ -344,11 +369,20 @@ void wakeFace(uint32_t now) {
   scheduleFaceBehavior(now);
 }
 void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction) {
+  if (reactionExitTransitionActive &&
+      static_cast<uint32_t>(now - reactionExitStartedAt) >= REACTION_EXIT_TRANSITION_MS) {
+    reactionExitTransitionActive = false;
+    lidAmount = exitToLeft.topLid;
+    pupilX = pupilTargetX = exitToLeft.pupilBiasX;
+    pupilY = pupilTargetY = exitToLeft.pupilBiasY;
+    scheduleFaceBehavior(now);
+  }
   if (reactionEntryTransitionActive &&
       static_cast<uint32_t>(now - reactionEntryStartedAt) >= REACTION_ENTER_TRANSITION_MS) {
     reactionEntryTransitionActive = false;
   }
   if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
+      !reactionExitTransitionActive &&
       !blinkActive && timeReached(now, nextBlinkAt)) {
     blinkActive = true;
     blinkStart = now;
@@ -356,6 +390,7 @@ void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction re
     scheduleNextBlink(now + blinkDuration);
   }
   if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
+      !reactionExitTransitionActive &&
       timeReached(now, nextDrowsyAt)) {
     drowsyUntil = now + random(1300, 2800);
     scheduleNextDrowsy(now);
@@ -368,6 +403,7 @@ void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction re
   }
   float sleepyAmt = 0.0f;
   if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
+      !reactionExitTransitionActive &&
       !timeReached(now, drowsyUntil))
     sleepyAmt = 0.25f + 0.08f * (0.5f + 0.5f * sinf(now * 0.004f));
   float targetLid = 0.0f;
@@ -380,7 +416,7 @@ void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction re
     pupilTargetX = 0; pupilTargetY = 0;
   } else if (coreState == BuddyCoreState::Sleeping) {
     pupilTargetX = 0; pupilTargetY = 10;
-  } else if (timeReached(now, nextLookAt)) {
+  } else if (!reactionExitTransitionActive && timeReached(now, nextLookAt)) {
     pupilTargetX = random(-16, 17);
     pupilTargetY = random(-10, 13);
     if (!timeReached(now, drowsyUntil)) pupilTargetY = random(6, 14);
