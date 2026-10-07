@@ -265,13 +265,17 @@ void testAutonomyDoesNotChangeDecayPolicy() {
     // Last touch schedules the deterministic autonomous deadline.
     const uint32_t deadline = 99 + touchCount + (touchCount == 2 ? 12000 : 20000);
     updateBehaviorEngine(deadline);
+    if (touchCount == 5) {
+      assert(getBuddyReaction() == BuddyReaction::Idle);  // Recovery refreshes timing.
+      updateBehaviorEngine(deadline + 12000);
+    }
     assert(getBuddyReaction() == BuddyReaction::Generic);
     assert(isAutonomousExpressionForMood(requestedExpression, getBuddyMood()));
     assert(requestedSound == ReactionSound::None);
     // One Engaged or two Grumpy decay ticks precede autonomy, without score effects.
     const BuddyMood decayedMood = BuddyMood::Engaged;
     assert(getBuddyMood() == decayedMood);
-    finishReactionAt(deadline + 10);
+    finishReactionAt(deadline + (touchCount == 5 ? 12010 : 10));
     assert(getBuddyMood() == decayedMood);
   }
 }
@@ -301,6 +305,8 @@ void testAutonomousSelectionUsesCurrentMood() {
   // The initial deadline is overdue at the same update inactivity reaches 90s.
   beginAt(0);
   updateBehaviorEngine(90000);
+  assert(getBuddyReaction() == BuddyReaction::Idle);
+  updateBehaviorEngine(135000);
   assert(getBuddyReaction() == BuddyReaction::Generic);
   assert(getTestAutonomousSelectionMood() == BuddyMood::Sleepy);
   assert(getBuddyMood() == BuddyMood::Sleepy);
@@ -309,6 +315,8 @@ void testAutonomousSelectionUsesCurrentMood() {
   constexpr uint32_t anchor = std::numeric_limits<uint32_t>::max() - 5000;
   beginAt(anchor);
   updateBehaviorEngine(anchor + uint32_t{90000});
+  assert(getBuddyReaction() == BuddyReaction::Idle);
+  updateBehaviorEngine(anchor + uint32_t{135000});
   assert(getTestAutonomousSelectionMood() == BuddyMood::Sleepy);
   assert(getBuddyMood() == BuddyMood::Sleepy);
 
@@ -317,6 +325,8 @@ void testAutonomousSelectionUsesCurrentMood() {
   processBuddyEvent(BuddyEvent::TouchTap, 101);  // Engaged at 45.
   finishReactionAt(102);
   updateBehaviorEngine(20101);  // Two decay ticks before selection: Calm at 35.
+  assert(getBuddyReaction() == BuddyReaction::Idle);
+  updateBehaviorEngine(48101);  // Refreshed Calm deadline, rather than stale Engaged.
   assert(getTestAutonomousSelectionMood() == BuddyMood::Calm);
   assert(getBuddyMood() == BuddyMood::Calm);
 }
