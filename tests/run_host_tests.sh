@@ -158,4 +158,9 @@ run_test "Buddy life long-run simulation" buddy_life_long_run \
   "${REPO_ROOT}/tests/buddy_life_long_run_test.cpp" \
   "${REPO_ROOT}/tests/BuddyLifeSimulator.cpp" "${REPO_ROOT}/BehaviorEngine.cpp"
 
+run_test "V2 release regression" v2_release_regression \
+  -DDESK_BUDDY_DIAGNOSTICS=1 -DDESK_BUDDY_TEST_LIFE_SIMULATOR=1 \
+  "${REPO_ROOT}/tests/v2_release_regression_test.cpp" \
+  "${REPO_ROOT}/tests/BuddyLifeSimulator.cpp" "${REPO_ROOT}/BehaviorEngine.cpp"
+
 printf '[PASS] all host tests\n'
