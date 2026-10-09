@@ -1,24 +1,25 @@
-# Desk Buddy Personality V1
+# Desk Buddy — Personality V2
 
 [![CI](https://github.com/bryce496913/Desk-Buddy/actions/workflows/ci.yml/badge.svg)](https://github.com/bryce496913/Desk-Buddy/actions/workflows/ci.yml)
 
-Desk Buddy is a small, Raspberry Pi Pico-based expressive desk companion. The
-Personality V1 firmware gives it animated LCD eyes, capacitive-touch interaction,
-environmental-sound reactions, passive-buzzer personality sounds, push-button
-sleep/wake, and autonomous idle behavior.
+Desk Buddy is a fully local, offline Raspberry Pi Pico RP2040 companion with
+animated procedural eyes, Tap and Hold interaction, environmental-sound
+reactions, longer-lived moods, recent cross-interaction memory, autonomous
+personality, mood-aware sounds, Quiet Mode, and button sleep/wake. Optional
+Serial diagnostics support development and physical observation.
 
-Everything runs locally on the RP2040. This version has **no AI, networking, or
-voice recognition**; the sound sensor detects a threshold event rather than
-interpreting audio.
+Everything runs on the RP2040: **no AI, networking, or voice recognition**. The
+digital sound sensor detects a threshold event; it does not interpret speech.
 
-The current Personality V1 behavior has passed real-world functional testing on
-the physical Desk Buddy hardware and is protected by the checked-in host
-regression tests and CI builds. This is a practical validation statement, not a
-certification or reliability guarantee.
+V2 behavior is protected by host regressions and real production/diagnostics
+Pico CI builds. Physical validation applies to the exact firmware commit and
+hardware used: record the release candidate's device results using the
+[physical tuning guide](docs/V2_PERSONALITY_TUNING.md) and
+[release checklist](RELEASE_CHECKLIST.md) before publishing.
 
 ## Hardware
 
-The physically validated build uses:
+The current Desk Buddy hardware uses:
 
 - Raspberry Pi Pico / RP2040
 - Waveshare 1.69-inch ST7789V2 240 x 280 LCD
@@ -77,224 +78,291 @@ FaceRenderer + SoundEngine
 | Module | Responsibility |
 | --- | --- |
 | `DeskBuddy.ino` | Initializes modules and coordinates the non-blocking main loop. |
-| `BehaviorEngine` | Owns awake/sleep state, interaction histories, reaction selection, and autonomous personality scheduling. |
-| `FaceRenderer` | Draws normal, reaction, and sleeping eyes; manages idle eye motion, blinks, and backlight transitions. |
-| `SoundEngine` | Plays non-blocking buzzer sequences and chooses reaction-sound variants. |
-| `SoundSensor` | Captures active-LOW sound triggers and filters events that should not reach the behavior engine. |
-| `Inputs` | Debounces the capacitive touch input and push button and emits press events. |
-| `Diagnostics` | When compiled in, parses Serial commands for reaction and sound-variant tuning. |
-| `Config` | Defines the diagnostic build switch, GPIO assignments, and display geometry. |
+| `BehaviorEngine` | Owns Awake/Sleeping core state, BuddyMood, independent interaction histories, recent cross-interaction context, reaction selection, weighted autonomous selection/timing, and Quiet Mode. |
+| `Inputs` | Debounces touch/button input and classifies Tap/Hold and ShortPress/LongPress. |
+| `FaceRenderer` | Draws procedural eyes, idle motion, expressions, entry/exit interpolation, micro-animation, and the sleeping face/backlight. |
+| `SoundEngine` | Plays non-blocking buzzer sequences and selects mood-weighted reaction variants with immediate-repeat avoidance. |
+| `SoundSensor` | Captures active-LOW triggers and filters cooldown, self-audio, reaction, and sleep suppression. |
+| `Diagnostics` | Optional Serial controls for V2 state, production-event simulation, expression showcases, and sound auditions. |
+| `Config` | Defines the diagnostics build switch, GPIO assignments, and display geometry. |
 
-## Personality behavior
+## Personality V2
 
-### Touch ladder
+### Moods
 
-Touches accepted while awake follow a rolling **6-second** history:
+Buddy has four longer-lived dispositions, separate from physical sleep and
+short-lived facial reactions:
 
-```text
-1st recent touch  → Happy
-2nd recent touch  → Curious
-3rd+ recent touch → Annoyed
-```
+| Mood | Character |
+| --- | --- |
+| Calm | Relaxed and present. |
+| Engaged | Interested and more energetic. |
+| Grumpy | Watchful and irritated, with affectionate recovery available. |
+| Sleepy | Low-energy after prolonged waking inactivity. |
 
-After more than six seconds without another touch, the next touch starts again
-at Happy.
+Interaction accumulates engagement and irritation; scores decay during awake
+time. Inactivity can produce Sleepy when score precedence and idle/audio
+eligibility permit it. Mood influences reaction selection, autonomous behavior,
+event timing, and sound-variant selection. Reactions use the mood on arrival,
+before that interaction changes the longer-lived disposition.
 
-### Sound ladder
+### Tap and Hold
 
-Accepted sound events follow a rolling **10-second** history:
+A **Tap** retains repeated-interaction escalation, now interpreted through mood
+and recent context. Taps have an independent rolling **6-second** repeat window;
+there is no single expression ladder for every mood.
 
-```text
-1st accepted sound  → Startled
-2nd accepted sound  → Suspicious
-3rd+ accepted sound → Confused
-```
+A **Hold** is an affectionate/petting interaction: it increases engagement and
+reduces irritation. The current threshold is **700 ms** from the debounced
+press. Hold emits once; releasing it does not add a Tap. It does not advance the
+Tap streak.
 
-The repeat window is based on accepted `SoundDetected` events. Raw noises and
-sensor edges are not equivalent to accepted events because the sound-sensor
-cooldown and suppression rules can reject them.
+### Recent cross-interaction memory
 
-### Sound vocabulary
+Buddy stores one recent Tap, Hold, or accepted Sound with its timestamp. The
+context is valid for **5 seconds, inclusive**, allowing sequences such as
+Tap → Sound and Sound → Hold to produce connected reactions. It is lightweight
+interaction context, not persistent memory. Physical sleep/wake clears it.
 
-Each of the six interactive personalities—Happy, Curious, Annoyed, Startled,
-Suspicious, and Confused—has **three sound variants**. Production firmware
-chooses among them randomly while preventing the same personality's variant
-from repeating immediately. See [`SoundEngine.cpp`](SoundEngine.cpp) for the
-sequence definitions and selection logic.
+Accepted sounds also have their own **10-second** repeat history. Raw sensor
+edges are not accepted interactions when filtering suppresses them.
 
 ### Autonomous personality
 
-While Buddy is awake and genuinely idle, an autonomous reaction is scheduled
-approximately every **20–40 seconds**. Buddy silently performs either:
+When Awake and eligible for an idle reaction, Buddy silently chooses among:
+**Curious, Daydreaming, SideGlance, Bored, SleepyDrift, SuspiciousGlance,
+ExcitedScanning, and AnnoyedSquint**.
 
-- Curious
-- Daydreaming
+Mood controls both behavior weighting and scheduled frequency:
 
-These autonomous expressions do not increment or reset the real touch and
-accepted-sound interaction histories. User interaction reschedules the idle
-timer.
+| Mood | Current scheduling range |
+| --- | --- |
+| Calm | 28–45 seconds |
+| Engaged | 12–24 seconds |
+| Grumpy | 20–35 seconds |
+| Sleepy | 45–70 seconds |
 
-## Sleep and wake
+Ranges are inclusive. Active reactions/audio and rescheduling can postpone a
+visible event; these are not guaranteed intervals between expressions. The
+previous autonomous choice is excluded when alternatives exist. Autonomous
+activity does not count as meaningful interaction or keep resetting inactivity.
 
-The button on GP7 toggles the power state:
+### Expression polish
 
-```text
-press while awake    → sleep
-press while sleeping → wake
-```
+V2 uses procedural interpolation for smooth reaction entry, exit, and replacement
+from the currently rendered face. Entry takes **180 ms** within the **1800 ms**
+reaction lifetime; the renderer's return to idle takes **220 ms** afterward.
 
-Sleep dims the LCD backlight, closes the eyes, displays an animated `Z`, and
-plays the sleep sound. Wake restores the backlight, animates the eyes, and plays
-the wake sound. The sound sensor cannot wake Buddy; only the button does so.
-Touch and sound histories are reset on entry to sleep, and sound history is
-reset again on wake so stale interactions do not carry into a new awake period.
+Small expression-specific motions include Happy bounce, Curious pupil shift,
+Annoyed tightening, Confused asymmetry, and Startled settling. SleepyDrift and
+ExcitedScanning remain animated. Rendering reuses the fixed eye/effect canvases;
+no new graphics or asset sheets are required.
+
+### Mood-aware sounds
+
+There are **18 existing reaction variants: six families × three variants**.
+Happy, Curious, Annoyed, Startled, Suspicious, and Confused each retain their
+three sequences. Mood weights which variant is more likely; immediate-repeat
+avoidance remains within each family. V2 changes selection rather than adding
+a new sound vocabulary.
+
+## Quiet Mode and sleep/wake
+
+| GP7 button action | Result |
+| --- | --- |
+| ShortPress while Awake | Enter physical Sleep. |
+| ShortPress while Sleeping | Wake. |
+| LongPress while Awake | Toggle Normal ↔ Quiet. |
+| LongPress while Sleeping | Wake without changing sound mode. |
+
+The LongPress threshold is **1000 ms** from the debounced press. ShortPress is
+recognized on release; LongPress emits once at the threshold, with no extra
+ShortPress on release.
+
+Quiet keeps visual reactions and mood evolution, suppresses production
+personality chirps, and stops a current personality reaction sound. Boot and
+Sleep/Wake cues remain. Quiet survives physical sleep/wake, resets to Normal
+after reboot, and does not replay suppressed sounds when Normal is restored.
+
+Physical Sleep closes the eyes, displays an animated `Z`, dims the backlight,
+and plays the sleep cue. Wake restores the display and plays the wake cue.
+Scores are preserved during Sleep, decay pauses, and wake starts fresh awake
+inactivity/decay clocks and recomputes mood. Touch/sound histories and recent
+context are cleared on sleep entry; wake clears context and sound history.
+
+**The sound sensor does not wake Buddy; the button is the wake control.**
+Sleepy mood is distinct from physical Sleep.
 
 ## VKLSVAN sound detection
 
-The VKLSVAN input uses an active-LOW **falling-edge interrupt**. To reduce false
-or self-triggered reactions, the firmware applies:
+GP26 uses an active-LOW falling-edge interrupt. Filtering applies a **2500 ms**
+cooldown after accepted sounds, suppression while buzzer audio or a personality
+reaction is active, suppression during physical Sleep, and **250 ms** settling
+at startup, after wake, and after Buddy audio ends.
 
-- a **2500 ms** cooldown after each accepted sound event;
-- suppression while Buddy's buzzer audio is active;
-- suppression while a face reaction is active;
-- suppression while Buddy is sleeping; and
-- short settling periods at startup, after wake, and after Buddy audio ends.
+For troubleshooting, check the active-LOW signal voltage and allow reaction,
+audio, cooldown, and settling to finish before the next sound trial.
 
-If sound reactions are missing during troubleshooting, first check the active-LOW
-signal voltage and then allow the current reaction, buzzer sequence, cooldown,
-and settling interval to finish before testing again.
+## Install Personality V2
 
-## Build and upload
+When the [v2.0.0 GitHub Release](https://github.com/bryce496913/Desk-Buddy/releases/tag/v2.0.0)
+is published, its planned assets are:
 
-CI validates the following pinned environment:
+- `DeskBuddy-v2.0.0.uf2` — production firmware, **diagnostics disabled**.
+- `DeskBuddy-v2.0.0.uf2.sha256` — SHA-256 checksum sidecar.
+- `BUILD_INFO.txt` — exact source commit and build/dependency metadata.
+
+Installation:
+
+1. Download `DeskBuddy-v2.0.0.uf2` from that release.
+2. Hold **BOOTSEL** while connecting/resetting the Pico to expose **RPI-RP2**.
+3. Copy the UF2 to **RPI-RP2**.
+4. The Pico reboots into Personality V2.
+
+To verify the download where `sha256sum` is available, put the UF2 and sidecar
+in the same directory and run `sha256sum -c DeskBuddy-v2.0.0.uf2.sha256`.
+This documentation pass does not create the release or its assets.
+
+### GitHub Actions production artifact
+
+Successful production CI jobs expose `desk-buddy-production-firmware`, containing
+`DeskBuddy-production.uf2` and `BUILD_INFO.txt`. This current Actions artifact is
+separate from the planned versioned release assets; the final packaging pass
+renames the verified production UF2 without changing its bytes and generates
+the checksum sidecar. Use the artifact's metadata to identify its exact commit.
+
+## Build from source
+
+CI pins and verifies these dependencies:
 
 | Component | Version |
 | --- | --- |
+| Arduino CLI | **1.3.1** |
 | Arduino-Pico core (`rp2040:rp2040`) | **4.3.1** |
 | Adafruit GFX Library | **1.12.6** |
 | Adafruit ST7735 and ST7789 Library | **1.11.0** |
 | Adafruit BusIO | **1.17.4** |
 | Target FQBN | **`rp2040:rp2040:rpipico`** |
 
-The workflow installs each library at the version above without allowing later
-library installs to replace its dependencies, then verifies the installed core
-and library versions before compiling. The CI source of truth for build versions
-is [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the source of truth for
+build versions and artifact packaging.
 
 ### Arduino IDE
 
-1. Add the Arduino-Pico package index URL to **Preferences > Additional Boards
-   Manager URLs**:
-   `https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`
-2. Install version **4.3.1** of the `rp2040` platform in Boards Manager.
-3. Install **Adafruit BusIO 1.17.4**, **Adafruit GFX Library 1.12.6**, and
-   **Adafruit ST7735 and ST7789 Library 1.11.0** in Library Manager.
-4. Open `DeskBuddy.ino`, select **Raspberry Pi Pico**, choose the correct port,
-   and compile/upload.
+1. Add the Arduino-Pico index URL to **Preferences > Additional Boards Manager URLs**:
+   `https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`.
+2. Install Arduino-Pico **4.3.1** and the three library versions listed above.
+3. Copy the repository's root `DeskBuddy.ino`, `.cpp`, and `.h` files into a
+   directory named `DeskBuddy`, so the sketch and directory names match.
+4. Open that `DeskBuddy.ino`, select **Raspberry Pi Pico**, and compile/upload.
 
 ### Arduino CLI
 
-With `arduino-cli` installed, reproduce the dependency setup used by CI:
+From the repository root, with Arduino CLI 1.3.1 installed:
 
 ```sh
-INDEX_URL=https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-
-arduino-cli core update-index --additional-urls "$INDEX_URL"
-arduino-cli core install rp2040:rp2040@4.3.1 --additional-urls "$INDEX_URL"
+PICO_INDEX_URL=https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+arduino-cli core update-index --additional-urls "$PICO_INDEX_URL"
+arduino-cli core install rp2040:rp2040@4.3.1 --additional-urls "$PICO_INDEX_URL"
 arduino-cli lib install "Adafruit BusIO@1.17.4"
 arduino-cli lib install "Adafruit GFX Library@1.12.6" --no-deps
-arduino-cli lib install \
-  "Adafruit ST7735 and ST7789 Library@1.11.0" --no-deps
+arduino-cli lib install "Adafruit ST7735 and ST7789 Library@1.11.0" --no-deps
+
+PICO_SKETCH_DIR="$(mktemp -d)/DeskBuddy"
+mkdir -p "$PICO_SKETCH_DIR"
+find . -maxdepth 1 -type f \( -name 'DeskBuddy.ino' -o -name '*.cpp' -o -name '*.h' \) \
+  -exec cp '{}' "$PICO_SKETCH_DIR/" \;
+arduino-cli compile --fqbn rp2040:rp2040:rpipico --warnings all \
+  --build-property 'compiler.cpp.extra_flags=-DDESK_BUDDY_DIAGNOSTICS=0' \
+  "$PICO_SKETCH_DIR"
 ```
 
-Arduino requires the sketch directory and primary `.ino` file to share a base
-name. Because this repository is named `Desk-Buddy` while the sketch is
-`DeskBuddy.ino`, either open the file in the IDE or stage the root `.ino`, `.cpp`,
-and `.h` files in a directory named `DeskBuddy` as CI does. Then compile:
+For diagnostics, repeat compilation with `DESK_BUDDY_DIAGNOSTICS=1` in the
+extra-flags property. Diagnostics default OFF in `Config.h`; no source edit is
+needed to switch build modes.
 
-```sh
-arduino-cli compile --fqbn rp2040:rp2040:rpipico /path/to/DeskBuddy
-```
+## V2 diagnostics
 
-## Diagnostics
+In a diagnostics build, open Serial at **115200 baud**. Startup prints help.
+Commands can be concatenated; spaces and CR/LF are ignored. Use these lowercase
+spellings:
 
-Diagnostics are compile-time disabled by default in `Config.h`:
-
-```cpp
-#define DESK_BUDDY_DIAGNOSTICS 0
-```
-
-For a development build, set the macro to `1` locally or pass
-`-DDESK_BUDDY_DIAGNOSTICS=1` as a compiler flag (the CI diagnostics build uses
-the latter). Connect a Serial monitor at **115200 baud**. Diagnostics print help
-at startup and accept one-character reaction commands:
-
-| Command | Reaction |
+| Command | Purpose |
 | --- | --- |
-| `0` | Normal |
-| `1` | Happy |
-| `2` | Curious |
-| `3` | Annoyed |
-| `4` | Startled |
-| `5` | Suspicious |
-| `6` | Confused |
-| `7` | Daydreaming |
-| `?` | Help |
+| `?` | Main help. |
+| `d?` | V2 state: core/reaction, mood/scores/inactivity, sound mode, recent context, autonomous timing/range. |
+| `m?` | Mood, scores, waking inactivity (zero while physically Sleeping). |
+| `mc`, `me`, `mg`, `ms` | Force Calm, Engaged, Grumpy, Sleepy for isolated testing. |
+| `et`, `eh` | Simulate real production Tap/Hold events; mutate scores/history and obey Quiet/Sleep. |
+| `ea` | One real mood-weighted autonomous selection; reports the chosen behavior. |
+| `e?` | Production-event help. |
+| `i?` | Recent interaction type, age, and validity. |
+| `t?` | Autonomous timing telemetry; background scheduling is disabled in diagnostics. |
+| `a1`–`a8`, `a?` | Direct silent autonomous showcase and help (mapping below). |
+| `q?`, `qn`, `qq` | Inspect sound mode, set Normal, set Quiet. |
+| `s?`, `sw` | Last production/Random sound selection; all family weights for current mood. |
+| `v1`, `v2`, `v3`, `vr` | Exact sound variant 1/2/3 or mood-weighted Random for subsequent numbered auditions. |
+| `0`–`7` | Direct reaction showcase (mapping below). |
 
-Sound-variant commands set the mode used by subsequent reaction commands:
-
-| Command | Selection |
+| Showcase | Mapping |
 | --- | --- |
-| `v1` | Force variant 1 |
-| `v2` | Force variant 2 |
-| `v3` | Force variant 3 |
-| `vr` | Restore random selection |
+| Reaction `0`–`7` | 0 Normal, 1 Happy, 2 Curious, 3 Annoyed, 4 Startled, 5 Suspicious, 6 Confused, 7 Daydreaming. |
+| Autonomous `a1`–`a8` | a1 Curious, a2 Daydreaming, a3 SideGlance, a4 Bored, a5 SuspiciousGlance, a6 AnnoyedSquint, a7 SleepyDrift, a8 ExcitedScanning. |
 
-Forced variants exist for tuning and deterministic testing only. Normal
-production builds keep randomized selection with immediate-repeat avoidance.
-Daydreaming is intentionally silent.
+`a1`–`a8` are isolated showcases; `ea` uses production weighting and no-repeat
+history, may replace a reaction, and does not enable background scheduling.
+Judge natural event frequency with a production build.
 
-## Tests
+Direct reaction auditions do not record interactions and **bypass Quiet** for
+explicit sound testing. Use `et`/`eh` or physical interaction to test Quiet.
+`v1` alone selects audition mode, rather than playing sound: for example, `v14`
+auditions Startled variant 1. `mcvr1` auditions Calm-weighted Random Happy.
+Forced variants do not update the Random selection snapshot/history. Daydreaming
+and autonomous showcases are silent. There is no Serial SoundDetected injection
+or Sleep/Wake command; use the real sensor and GP7 button.
 
-Run the complete local host regression suite from the repository root:
+## Tests and CI
+
+Run the full strict host suite:
 
 ```sh
 ./tests/run_host_tests.sh
+git diff --check
 ```
 
-The script compiles with `g++` and exercises:
+Coverage includes production BehaviorEngine, touch/button gesture boundaries,
+SoundSensor filtering, mood state/lifecycle, cross-interaction memory, weighted
+autonomy and timing, mood-aware sound selection, Quiet audio policy, V2
+command parsing and event simulation, and renderer expressions/interpolation,
+entry/exit, micro-motion, lifecycle, and rollover behavior.
 
-- the production `BehaviorEngine`;
-- `SoundSensor` event filtering;
-- `FaceRenderer` timing across the `millis()` rollover;
-- the diagnostics-enabled `BehaviorEngine`;
-- the diagnostics Serial parser; and
-- deterministic diagnostic sound-variant selection.
+The reusable [Buddy-life simulator](tests/BuddyLifeSimulator.md) exercises the
+actual BehaviorEngine using deterministic virtual time and production events.
+Mood-evolution scenarios and multi-minute long runs check lifecycle and state
+invariants instantly, including rollover and Normal/Quiet parity. A release-level
+regression follows a representative natural V2 lifecycle without forcing moods.
+The simulator's sound stub models eligibility, not exact buzzer duration;
+separate sound integration tests exercise real sequence playback.
 
-## Continuous integration
-
-GitHub Actions workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
-runs on pull requests and pushes to `main`. It verifies:
-
-1. the host regression tests;
-2. a real production Raspberry Pi Pico compile; and
-3. a real diagnostics-enabled Raspberry Pi Pico compile.
-
-Both firmware builds target `rp2040:rp2040:rpipico` using the pinned core and
-display-library versions above. The badge at the top of this README reports this
-workflow's status.
+GitHub Actions runs host tests plus real production and diagnostics Pico builds
+on pull requests and pushes to `main`, using the pinned dependencies above.
+The badge reports this workflow's status.
 
 ## Repository structure
 
 ```text
-DeskBuddy.ino             Main sketch and module coordination
-Config.h                  GPIO assignments, display geometry, build switch
-BehaviorEngine.{h,cpp}    State, event mapping, and personality scheduling
-Inputs.{h,cpp}            Touch and button input/debouncing
-SoundSensor.{h,cpp}       VKLSVAN interrupt capture and event filtering
-FaceRenderer.{h,cpp}      ST7789 eye and expression rendering
-SoundEngine.{h,cpp}       Passive-buzzer sequences and variant selection
-Diagnostics.{h,cpp}       Optional Serial diagnostic interface
-tests/                    Host regression suite and Arduino test shim
-.github/workflows/ci.yml  Host tests and production/diagnostics Pico builds
+DeskBuddy.ino               Main sketch and module coordination
+Config.h                    GPIO assignments, display geometry, build switch
+BehaviorEngine.{h,cpp}      Core state, mood, events, selection, timing, Quiet
+Inputs.{h,cpp}              Touch/button debounce and gesture classification
+SoundSensor.{h,cpp}         VKLSVAN interrupt capture and filtering
+FaceRenderer.{h,cpp}        Procedural eyes, interpolation, micro-animation
+SoundEngine.{h,cpp}         Passive-buzzer playback and mood-weighted variants
+Diagnostics.{h,cpp}         Optional V2 Serial controls and telemetry
+tests/                      Host tests, simulator, Arduino/display shims
+docs/V2_PERSONALITY_TUNING.md  Source inventory and physical observation guide
+CHANGELOG.md                Version history; release date pending
+RELEASE_NOTES_v2.0.0.md      Curated release notes
+RELEASE_CHECKLIST.md         Exact-candidate release gates
+.github/workflows/ci.yml    Host tests, Pico builds, production artifact
 ```
