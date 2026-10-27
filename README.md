@@ -78,9 +78,10 @@ FaceRenderer + SoundEngine
 | Module | Responsibility |
 | --- | --- |
 | `DeskBuddy.ino` | Initializes modules and coordinates the non-blocking main loop. |
+| `Settings` | Stores the Normal/Quiet preference in flash so it survives power cycles. |
 | `BehaviorEngine` | Owns Awake/Sleeping core state, BuddyMood, independent interaction histories, recent cross-interaction context, reaction selection, weighted autonomous selection/timing, and Quiet Mode. |
-| `Inputs` | Debounces touch/button input and classifies Tap/Hold and ShortPress/LongPress. |
-| `FaceRenderer` | Draws procedural eyes, idle motion, expressions, entry/exit interpolation, micro-animation, and the sleeping face/backlight. |
+| `Inputs` | Debounces touch/button input, classifies Tap/Hold and ShortPress/LongPress, and reports a sustained Hold for petting. |
+| `FaceRenderer` | Draws procedural eyes, time-based idle motion, mood rest poses and moments, expressions, entry/exit interpolation, micro-animation, fall-asleep/wake-stretch, and the sleeping face/breathing backlight. |
 | `SoundEngine` | Plays non-blocking buzzer sequences and selects mood-weighted reaction variants with immediate-repeat avoidance. |
 | `SoundSensor` | Captures active-LOW triggers and filters cooldown, self-audio, reaction, and sleep suppression. |
 | `Diagnostics` | Optional Serial controls for V2 state, production-event simulation, expression showcases, and sound auditions. |
@@ -116,6 +117,13 @@ A **Hold** is an affectionate/petting interaction: it increases engagement and
 reduces irritation. The current threshold is **700 ms** from the debounced
 press. Hold emits once; releasing it does not add a Tap. It does not advance the
 Tap streak.
+
+Keep holding after the Hold's Happy reaction to **pet** Buddy: the eyes settle
+into a contented half-closed squint with a slow sway, and Buddy purrs once per
+cycle (silent in Quiet). Each purr cycle adds a little engagement and eases
+irritation. Letting go plays a slow, contented blink. Releasing during the first
+Happy reaction behaves exactly as a plain Hold. Sound reactions and autonomy do
+not interrupt petting; a button press still sleeps Buddy.
 
 ### Recent cross-interaction memory
 
@@ -170,6 +178,17 @@ Moments wait until any reaction has finished its exit and the face has rested fo
 400 ms; a new reaction interrupts a moment cleanly and the moment replays later.
 Sleep and wake adopt the current mood without a moment.
 
+Mood also tints the iris slightly: Calm keeps the V2 blue, Engaged warms toward
+teal, Grumpy cools to slate, and Sleepy desaturates. The tint glides with the mood
+moment. Mood shapes reactions too: Engaged reactions are about 10% quicker and
+25% bigger, Sleepy ones about 15% slower and 30% smaller. Every reaction also
+adds up to 200 ms and up to 15% size at random, so repeats are not identical.
+Idle blinks occasionally come as a quick double blink.
+
+All idle easing (lids, pupils, backlight) is time-based, so motion looks the same
+whatever the main loop rate. Blinks are layered on top unsmoothed and still close
+fully.
+
 ### Mood-aware sounds
 
 There are **18 existing reaction variants: six families × three variants**.
@@ -193,11 +212,16 @@ ShortPress on release.
 
 Quiet keeps visual reactions and mood evolution, suppresses production
 personality chirps, and stops a current personality reaction sound. Boot and
-Sleep/Wake cues remain. Quiet survives physical sleep/wake, resets to Normal
-after reboot, and does not replay suppressed sounds when Normal is restored.
+Sleep/Wake cues remain. Quiet survives physical sleep/wake and is saved to
+flash, so it also survives a reboot or power cycle; flash is written only when
+the mode changes. Returning to Normal does not replay suppressed sounds.
 
-Physical Sleep closes the eyes, displays an animated `Z`, dims the backlight,
-and plays the sleep cue. Wake restores the display and plays the wake cue.
+Physical Sleep plays the sleep cue while Buddy dozes off over **1.8 s**: lids
+droop, rise once as Buddy fights it, then close with a small head nod as the
+backlight dims. Asleep, Buddy shows an animated `Z` and the backlight breathes
+slowly. Wake plays the wake cue, restores the display, blinks, and stretches for
+**1.5 s** (eyes wide, a look left and right) before settling into the mood's
+rest pose.
 Scores are preserved during Sleep, decay pauses, and wake starts fresh awake
 inactivity/decay clocks and recomputes mood. Touch/sound histories and recent
 context are cleared on sleep entry; wake clears context and sound history.
@@ -346,7 +370,10 @@ Coverage includes production BehaviorEngine, touch/button gesture boundaries,
 SoundSensor filtering, mood state/lifecycle, cross-interaction memory, weighted
 autonomy and timing, mood-aware sound selection, Quiet audio policy, V2
 command parsing and event simulation, and renderer expressions/interpolation,
-entry/exit, micro-motion, lifecycle, and rollover behavior.
+entry/exit, micro-motion, lifecycle, and rollover behavior. Further renderer tests
+cover mood rest poses and moments, frame-rate-independent easing, double blinks,
+mood-scaled reaction variation, iris tint, falling asleep, the breathing
+backlight and the wake stretch, plus petting and Settings persistence.
 
 The reusable [Buddy-life simulator](tests/BuddyLifeSimulator.md) exercises the
 actual BehaviorEngine using deterministic virtual time and production events.
@@ -365,7 +392,8 @@ The badge reports this workflow's status.
 ```text
 DeskBuddy.ino               Main sketch and module coordination
 Config.h                    GPIO assignments, display geometry, build switch
-BehaviorEngine.{h,cpp}      Core state, mood, events, selection, timing, Quiet
+BehaviorEngine.{h,cpp}      Core state, mood, events, selection, timing, Quiet, petting
+Settings.{h,cpp}            Flash-backed Normal/Quiet preference
 Inputs.{h,cpp}              Touch/button debounce and gesture classification
 SoundSensor.{h,cpp}         VKLSVAN interrupt capture and filtering
 FaceRenderer.{h,cpp}        Procedural eyes, interpolation, micro-animation

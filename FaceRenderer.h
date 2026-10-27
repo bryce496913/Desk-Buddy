@@ -17,7 +17,9 @@ enum class FaceExpression : uint8_t {
   SleepyDrift,
   SuspiciousGlance,
   ExcitedScanning,
-  AnnoyedSquint
+  AnnoyedSquint,
+  Petted,
+  ContentBlink
 };
 
 void beginFaceRenderer();

@@ -13,6 +13,7 @@ enum class SoundSequence : uint8_t {
   StartledReaction,
   SuspiciousReaction,
   ConfusedReaction,
+  PurrReaction,
   Sleep,
   Wake
 };
@@ -67,6 +68,12 @@ constexpr uint16_t confusedWobbleDurs[] = {65, 90, 75, 125, 105};
 constexpr uint16_t confusedStumbleNotes[] = {932, 1480, 1175, 659};
 constexpr uint16_t confusedStumbleDurs[] = {90, 65, 80, 155};
 
+// Soft low trill while being petted; one purr per petting cycle.
+constexpr uint16_t purrNotes[] = {330, 294, 330, 277, 311, 262};
+constexpr uint16_t purrDurs[] = {70, 60, 70, 60, 80, 120};
+
+constexpr SequenceDefinition PURR_SEQUENCE = {
+    purrNotes, purrDurs, static_cast<uint8_t>(sizeof(purrNotes) / sizeof(purrNotes[0])), 14};
 constexpr SequenceDefinition BOOT_SEQUENCE = {bootNotes, bootDurs, 3, 20};
 constexpr SequenceDefinition SLEEP_SEQUENCE = {sleepNotes, sleepDurs, 3, 24};
 constexpr SequenceDefinition WAKE_SEQUENCE = {wakeNotes, wakeDurs, 3, 20};
@@ -196,7 +203,8 @@ bool isReactionSequence(SoundSequence sequence) {
          sequence == SoundSequence::AnnoyedReaction ||
          sequence == SoundSequence::StartledReaction ||
          sequence == SoundSequence::SuspiciousReaction ||
-         sequence == SoundSequence::ConfusedReaction;
+         sequence == SoundSequence::ConfusedReaction ||
+         sequence == SoundSequence::PurrReaction;
 }
 
 void stopSequence() {
@@ -251,6 +259,7 @@ VariantWeights weightsFor(ReactionSound sound, BuddyMood mood) {
     case ReactionSound::Suspicious: family = 4; break;
     case ReactionSound::Confused: family = 5; break;
     case ReactionSound::None: return {{1, 1, 1}}; // Not selected: None is silent.
+    case ReactionSound::Purr: return {{1, 1, 1}}; // Not selected: Purr has one form.
   }
   uint8_t context = 0;
   switch (mood) {
@@ -381,6 +390,12 @@ void startReactionSound(uint32_t now, ReactionSound sound, BuddyMood mood) {
                     CONFUSED_REACTION_SEQUENCES[variant], now);
       break;
     }
+    case ReactionSound::Purr:
+#if DESK_BUDDY_DIAGNOSTICS
+      clearSoundSelection();
+#endif
+      startSequence(SoundSequence::PurrReaction, PURR_SEQUENCE, now);
+      break;
   }
 }
 
@@ -442,6 +457,8 @@ bool startDiagnosticReactionSound(uint32_t now, ReactionSound sound,
       variantCount = CONFUSED_VARIANT_COUNT;
       lastVariant = &lastConfusedVariant;
       break;
+    case ReactionSound::Purr:
+      return false;  // Not a variant family; heard through real petting.
   }
 
   if (requestedVariantIndex == DIAGNOSTIC_RANDOM_VARIANT) {

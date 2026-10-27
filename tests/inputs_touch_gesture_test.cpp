@@ -68,6 +68,27 @@ void testHoldWhileHighAndLongHold() {
   release(nextPress + 150, TouchGesture::Tap);
 }
 
+bool heldAt(uint32_t now) {
+  clockNow = now;
+  return updateInputs(now).touchHeld;
+}
+
+void testTouchHeldForPetting() {
+  beginAt();
+  const uint32_t pressedAt = press(100);
+  assert(!heldAt(pressedAt + 699));  // A press is not petting until it is a Hold.
+  assert(heldAt(pressedAt + 700));
+  assert(heldAt(pressedAt + 5000));
+  touchHigh = false;
+  assert(heldAt(pressedAt + 5001));  // Release debounce keeps the hold steady.
+  assert(heldAt(pressedAt + 5026));
+  assert(!heldAt(pressedAt + 5027));
+  // A Tap never reports held.
+  const uint32_t tapAt = press(pressedAt + 6000);
+  assert(!heldAt(tapAt + 100));
+  release(tapAt + 150, TouchGesture::Tap);
+}
+
 void testBounce() {
   beginAt();
   // Idle HIGH glitch never reaches a stable press.
@@ -241,6 +262,7 @@ void pinMode(uint8_t pin, uint8_t mode) {
 int main() {
   testTapAndBoundary();
   testHoldWhileHighAndLongHold();
+  testTouchHeldForPetting();
   testBounce();
   testBootHighAndReinitialization();
   testRollover();

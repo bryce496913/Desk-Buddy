@@ -79,10 +79,56 @@ constexpr float STARTLED_BOTTOM_SETTLE = 0.05f;
 constexpr int STARTLED_PUPIL_GROWTH_PX = 2;
 constexpr int STARTLED_IRIS_GROWTH_PX = 1;
 constexpr float STARTLED_SPARK_END_PROGRESS = 0.40f;
+// Mood shapes how long and how big each reaction plays; a little per-reaction
+// jitter keeps repeats from looking identical. Calm with no jitter is V2 exactly.
+constexpr uint32_t REACTION_JITTER_MS = 200;
+constexpr long REACTION_INTENSITY_JITTER_PERCENT = 15;
+constexpr float MAX_REACTION_INTENSITY = 1.25f * 1.15f;
+uint32_t reactionDurationMs = REACTION_DURATION_MS;
+float reactionIntensity = 1.0f;
 FaceExpression activeExpression = FaceExpression::Normal;
 uint32_t lastFrameAt = 0;
 int backlightCurrent = 255;
 int backlightTarget = 255;
+// Easing is time-based so motion feels the same whatever the loop rate.
+// Each tau is the time to close about 63% of the remaining gap.
+constexpr float LID_EASE_TAU_MS = 45.0f;
+constexpr float PUPIL_IDLE_TAU_MS = 110.0f;
+constexpr float PUPIL_REACTION_TAU_MS = 40.0f;
+constexpr float PUPIL_SLEEP_TAU_MS = 400.0f;
+constexpr float BACKLIGHT_TAU_MS = 350.0f;
+constexpr uint32_t MAX_EASE_STEP_MS = 1000;
+uint32_t lastUpdateAt = 0;
+bool hasUpdated = false;
+float lidEased = 0.0f;  // Drowsy/sleep lid; blinks layer on top unsmoothed.
+float backlightLevel = 255.0f;
+// Falling asleep: lids droop, fight back once, then close with a small nod.
+constexpr uint32_t FALL_ASLEEP_MS = 1800;
+constexpr int SLEEP_NOD_PX = 6;
+constexpr int SLEEP_BACKLIGHT = 40;
+constexpr int SLEEP_BREATH_DEPTH = 14;
+constexpr uint32_t SLEEP_BREATH_PERIOD_MS = 4500;
+bool fallingAsleep = false;
+uint32_t fallAsleepStartedAt = 0;
+float fallAsleepFromLid = 0.0f;
+uint32_t sleepBreathStartedAt = 0;
+// Waking: the wake blink, then a stretch (eyes wide, look left, look right).
+constexpr uint32_t WAKE_STRETCH_MS = 1500;
+constexpr int WAKE_LOOK_PX = 10;
+bool wakeStretchActive = false;
+uint32_t wakeStretchStartedAt = 0;
+// Occasional double blink.
+constexpr long DOUBLE_BLINK_PERCENT = 12;
+constexpr uint32_t DOUBLE_BLINK_GAP_MS = 110;
+bool doubleBlinkQueued = false;
+// Petting: a slow contented sway that stays continuous across purr cycles.
+constexpr uint32_t PETTED_SWAY_PERIOD_MS = 2400;
+constexpr int PETTED_SWAY_PX = 3;
+constexpr float PETTED_BREATH_LID = 0.04f;
+
+float easeToward(float current, float target, uint32_t dtMs, float tauMs) {
+  return lerpf(current, target, 1.0f - expf(-float(dtMs) / tauMs));
+}
 
 void scheduleNextBlink(uint32_t now) { nextBlinkAt = now + random(1800, 4200); }
 void scheduleNextLook(uint32_t now) { nextLookAt = now + random(600, 1600); }
@@ -129,6 +175,7 @@ EyeExpressionParams entryFromLeft{}, entryFromRight{};
 EyeExpressionParams exitFromLeft{}, exitFromRight{};
 EyeExpressionParams exitToLeft{}, exitToRight{};
 EyeExpressionParams renderedLeft{}, renderedRight{};
+uint16_t currentIrisColor = COL_IRIS;
 bool hasRenderedEyes = false;
 
 // Shared easing and geometry interpolation for reaction entry and exit.
@@ -159,14 +206,14 @@ bool hasRenderedEyes = false;
 
 float reactionProgress01(uint32_t now) {
   return clampf(float(static_cast<uint32_t>(now - reactionStartedAt)) /
-                REACTION_DURATION_MS, 0.0f, 1.0f);
+                reactionDurationMs, 0.0f, 1.0f);
 }
 
 [[maybe_unused]] float reactionPresentationProgress01(uint32_t now) {
   const uint32_t elapsed = static_cast<uint32_t>(now - reactionStartedAt);
   if (elapsed <= REACTION_ENTER_TRANSITION_MS) return 0.0f;
   return clampf(float(elapsed - REACTION_ENTER_TRANSITION_MS) /
-                (REACTION_DURATION_MS - REACTION_ENTER_TRANSITION_MS), 0.0f, 1.0f);
+                (reactionDurationMs - REACTION_ENTER_TRANSITION_MS), 0.0f, 1.0f);
 }
 
 // One shot: zero at either endpoint, smoothly rising to one at the midpoint.
@@ -184,6 +231,10 @@ struct MoodRestPose {
   float pupilDelta;
   float biasX;
   float biasY;
+  // Iris tint, as RGB offsets from the base iris colour.
+  float irisR;
+  float irisG;
+  float irisB;
 };
 constexpr uint32_t MOOD_MOMENT_DELAY_MS = 400;
 constexpr uint32_t MOOD_MOMENT_MS = 900;
@@ -200,11 +251,12 @@ bool snapMoodOnNextUpdate = false;
 
 MoodRestPose moodRestPose(BuddyMood mood) {
   switch (mood) {
-    case BuddyMood::Engaged: return {0.0f, 0.06f, 1.0f, 0.0f, 0.0f, -3.0f};
-    case BuddyMood::Grumpy: return {0.20f, 0.06f, 0.0f, -1.0f, 0.0f, 2.0f};
-    case BuddyMood::Sleepy: return {0.30f, 0.08f, -1.0f, 0.0f, 0.0f, 4.0f};
+    // Engaged warms toward teal, Grumpy cools to slate, Sleepy desaturates.
+    case BuddyMood::Engaged: return {0.0f, 0.06f, 1.0f, 0.0f, 0.0f, -3.0f, 30.0f, 25.0f, -20.0f};
+    case BuddyMood::Grumpy: return {0.20f, 0.06f, 0.0f, -1.0f, 0.0f, 2.0f, 20.0f, -35.0f, -70.0f};
+    case BuddyMood::Sleepy: return {0.30f, 0.08f, -1.0f, 0.0f, 0.0f, 4.0f, 25.0f, -15.0f, -60.0f};
     case BuddyMood::Calm:
-    default: return {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    default: return {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
   }
 }
 
@@ -223,38 +275,67 @@ MoodRestPose currentRestPose(uint32_t now) {
   const float t = smoothstep01(moodMomentProgress01(now));
   return {lerpf(momentFrom.topLid, to.topLid, t), lerpf(momentFrom.bottomLid, to.bottomLid, t),
           lerpf(momentFrom.irisDelta, to.irisDelta, t), lerpf(momentFrom.pupilDelta, to.pupilDelta, t),
-          lerpf(momentFrom.biasX, to.biasX, t), lerpf(momentFrom.biasY, to.biasY, t)};
+          lerpf(momentFrom.biasX, to.biasX, t), lerpf(momentFrom.biasY, to.biasY, t),
+          lerpf(momentFrom.irisR, to.irisR, t), lerpf(momentFrom.irisG, to.irisG, t),
+          lerpf(momentFrom.irisB, to.irisB, t)};
 }
 
 // One-shot gesture layered over the rest-pose glide, named for the new mood:
 // Engaged perks up, Grumpy huffs, Sleepy takes a heavy blink, Calm sighs.
 MoodRestPose moodMomentAccent(uint32_t now, bool isLeftEye) {
-  if (!moodMomentActive) return {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+  if (!moodMomentActive) return {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
   const float p = smoothPulse(moodMomentProgress01(now));
   switch (momentMood) {
     case BuddyMood::Engaged:
-      return {0.0f, 0.0f, 2.0f * p, 1.0f * p, 0.0f, -4.0f * p};
+      return {0.0f, 0.0f, 2.0f * p, 1.0f * p, 0.0f, -4.0f * p, 0.0f, 0.0f, 0.0f};
     case BuddyMood::Grumpy:
       return {(isLeftEye ? 0.26f : 0.18f) * p, 0.12f * p, 0.0f, -1.0f * p,
-              (isLeftEye ? 2.0f : -2.0f) * p, 2.0f * p};
+              (isLeftEye ? 2.0f : -2.0f) * p, 2.0f * p, 0.0f, 0.0f, 0.0f};
     case BuddyMood::Sleepy:
-      return {0.50f * p, 0.10f * p, 0.0f, 0.0f, 0.0f, 4.0f * p};
+      return {0.50f * p, 0.10f * p, 0.0f, 0.0f, 0.0f, 4.0f * p, 0.0f, 0.0f, 0.0f};
     case BuddyMood::Calm:
     default:
-      return {0.30f * p, 0.10f * p, 0.0f, 0.0f, 0.0f, 2.0f * p};
+      return {0.30f * p, 0.10f * p, 0.0f, 0.0f, 0.0f, 2.0f * p, 0.0f, 0.0f, 0.0f};
   }
+}
+
+float wakeStretchProgress01(uint32_t now) {
+  return clampf(float(static_cast<uint32_t>(now - wakeStretchStartedAt)) / WAKE_STRETCH_MS,
+                0.0f, 1.0f);
+}
+
+// 0..1 eye-opening after the wake blink; zero at both ends of the stretch.
+float wakeStretchWiden(uint32_t now) {
+  if (!wakeStretchActive) return 0.0f;
+  return smoothPulse((wakeStretchProgress01(now) - 0.12f) / 0.50f);
+}
+
+float wakeStretchLookX(uint32_t now) {
+  if (!wakeStretchActive) return 0.0f;
+  const float p = wakeStretchProgress01(now);
+  return WAKE_LOOK_PX * (smoothPulse((p - 0.55f) / 0.30f) - smoothPulse((p - 0.30f) / 0.30f));
+}
+
+uint16_t moodIrisColor(uint32_t now) {
+  const MoodRestPose pose = currentRestPose(now);
+  return rgb565(uint8_t(clampf(64.0f + pose.irisR, 0.0f, 255.0f)),
+                uint8_t(clampf(170.0f + pose.irisG, 0.0f, 255.0f)),
+                uint8_t(clampf(255.0f + pose.irisB, 0.0f, 255.0f)));
 }
 
 // Neutral idle geometry tinted by mood; blinks and drowsiness close from the tint.
 EyeExpressionParams restingFaceParams(uint32_t now, bool isLeftEye) {
   const MoodRestPose pose = currentRestPose(now);
   const MoodRestPose accent = moodMomentAccent(now, isLeftEye);
-  const float top = clampf(pose.topLid + accent.topLid, 0.0f, 1.0f);
-  const float bottom = clampf(pose.bottomLid + accent.bottomLid, 0.0f, 1.0f);
+  const float widen = wakeStretchWiden(now);
+  const float open = 1.0f - widen;
+  const float top = clampf((pose.topLid + accent.topLid) * open, 0.0f, 1.0f);
+  const float bottom = clampf((pose.bottomLid + accent.bottomLid) * open, 0.0f, 1.0f);
   return {top + lidAmount * (1.0f - top), bottom + lidAmount * (1.0f - bottom),
-          18 + int(lroundf(pose.irisDelta + accent.irisDelta)),
+          18 + int(lroundf(pose.irisDelta + accent.irisDelta + 2.0f * widen)),
           8 + int(lroundf(pose.pupilDelta + accent.pupilDelta)),
-          int(lroundf(pose.biasX + accent.biasX)), int(lroundf(pose.biasY + accent.biasY)),
+          int(lroundf(pose.biasX + accent.biasX + wakeStretchLookX(now))),
+          int(lroundf(pose.biasY + accent.biasY - 3.0f * widen)),
           false, false};
 }
 
@@ -270,36 +351,50 @@ EyeExpressionParams applyReactionMicroAnimation(
     EyeExpressionParams params) {
   if (expression == FaceExpression::Normal) return params;
   const float progress = reactionPresentationProgress01(now);
+  const float k = reactionIntensity;
   switch (expression) {
     case FaceExpression::Happy: {
-      const float bounce = smoothPulse(progress);
+      const float bounce = smoothPulse(progress) * k;
       params.pupilBiasY -= int(lroundf(HAPPY_BOUNCE_PX * bounce));
       params.bottomLid += HAPPY_LID_LIFT * bounce;
       break;
     }
     case FaceExpression::Curious: {
-      const float shift = smoothstep01((progress - 0.35f) / 0.25f);
+      const float shift = smoothstep01((progress - 0.35f) / 0.25f) * k;
       params.pupilBiasX += (curiousShiftRight ? 1 : -1) * int(lroundf(CURIOUS_SHIFT_PX * shift));
       break;
     }
     case FaceExpression::Annoyed: {
-      const float tighten = smoothstep01(progress / 0.5f);
+      const float tighten = smoothstep01(progress / 0.5f) * k;
       params.topLid += ANNOYED_TOP_TIGHTEN * tighten;
       params.bottomLid += ANNOYED_BOTTOM_TIGHTEN * tighten;
       break;
     }
     case FaceExpression::Confused: {
-      const float diverge = smoothstep01((progress - 0.30f) / 0.35f);
+      const float diverge = smoothstep01((progress - 0.30f) / 0.35f) * k;
       params.pupilBiasX += (isLeftEye ? -1 : 1) * int(lroundf(CONFUSED_DIVERGE_PX * diverge));
       break;
     }
     case FaceExpression::Startled: {
-      const float settle = smoothstep01(progress);
+      const float settle = smoothstep01(progress) * k;
       params.topLid += STARTLED_TOP_SETTLE * settle;
       params.bottomLid += STARTLED_BOTTOM_SETTLE * settle;
       params.pupilRadius += int(lroundf(STARTLED_PUPIL_GROWTH_PX * settle));
       params.irisRadius += int(lroundf(STARTLED_IRIS_GROWTH_PX * settle));
       params.showSpark = progress < STARTLED_SPARK_END_PROGRESS;
+      break;
+    }
+    case FaceExpression::Petted: {
+      // Wall-clock sway so back-to-back purr cycles join seamlessly.
+      const float phase = float(now % PETTED_SWAY_PERIOD_MS) / PETTED_SWAY_PERIOD_MS;
+      params.pupilBiasX += int(lroundf(PETTED_SWAY_PX * sinf(phase * 6.2831853f)));
+      params.topLid += PETTED_BREATH_LID * (0.5f + 0.5f * cosf(phase * 6.2831853f * 2.0f));
+      break;
+    }
+    case FaceExpression::ContentBlink: {
+      const float blink = smoothPulse((progress - 0.10f) / 0.45f);
+      params.topLid += (1.0f - params.topLid) * blink;
+      params.bottomLid += 0.15f * blink;
       break;
     }
     default:
@@ -359,6 +454,10 @@ EyeExpressionParams baseExpressionParams(FaceExpression expression, bool isLeftE
           : lerpf(15.0f, 0.0f, (progress - 0.66f) / 0.34f);
       return {0.02f, 0.02f, 19, 8, int(scan), -3, false, false};
     }
+    case FaceExpression::Petted:
+      return {0.30f, 0.40f, 18, 7, isLeftEye ? 3 : -3, -4, false, false};
+    case FaceExpression::ContentBlink:
+      return {0.10f, 0.34f, 18, 8, isLeftEye ? 3 : -3, -6, false, false};
     case FaceExpression::Normal:
     default:
       return restingFaceParams(now, isLeftEye);
@@ -410,7 +509,7 @@ void drawEye(GFXcanvas16 &target, int cx, int cy, int w, int h,
   int pupilRangeY = (h / 2) - 24;
   int px = cx + int(clampf(params.pupilBiasX, -pupilRangeX, pupilRangeX));
   int py = cy + int(clampf(params.pupilBiasY, -pupilRangeY, pupilRangeY));
-  uint16_t irisColor = params.reactiveIris ? COL_IRIS_REACT : COL_IRIS;
+  uint16_t irisColor = params.reactiveIris ? COL_IRIS_REACT : currentIrisColor;
   target.fillCircle(px, py, params.irisRadius, irisColor);
   target.fillCircle(px, py, params.pupilRadius, COL_PUPIL);
   target.fillCircle(px - 5, py - 5, 4, COL_HILITE);
@@ -451,10 +550,46 @@ void renderSleepZ(uint32_t now, BuddyCoreState coreState) {
   }
   tft.drawRGBBitmap(Z_X, Z_Y, effectCanvas.getBuffer(), EFFECT_REGION_W, EFFECT_REGION_H);
 }
+float moodReactionTempo(BuddyMood mood) {
+  switch (mood) {
+    case BuddyMood::Engaged: return 0.90f;
+    case BuddyMood::Sleepy: return 1.15f;
+    case BuddyMood::Grumpy:
+    case BuddyMood::Calm:
+    default: return 1.0f;
+  }
+}
+
+float moodReactionIntensity(BuddyMood mood) {
+  switch (mood) {
+    case BuddyMood::Engaged: return 1.25f;
+    case BuddyMood::Sleepy: return 0.70f;
+    case BuddyMood::Grumpy:
+    case BuddyMood::Calm:
+    default: return 1.0f;
+  }
+}
+
+// Lids droop, rise once as Buddy fights it, then close fully.
+float fallAsleepLid(float progress) {
+  const float droop = lerpf(fallAsleepFromLid, 0.65f, smoothstep01(progress / 0.45f));
+  const float resist = 0.20f * smoothPulse((progress - 0.40f) / 0.25f);
+  return clampf(lerpf(droop - resist, 1.0f, smoothstep01((progress - 0.60f) / 0.40f)),
+                0.0f, 1.0f);
+}
+
+int sleepNodOffsetPx(uint32_t now) {
+  if (!fallingAsleep) return 0;
+  const float progress = clampf(float(static_cast<uint32_t>(now - fallAsleepStartedAt)) /
+                                FALL_ASLEEP_MS, 0.0f, 1.0f);
+  return int(lroundf(SLEEP_NOD_PX * smoothPulse((progress - 0.35f) / 0.60f)));
+}
+
 void renderFrame(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction) {
   int bobY = coreState == BuddyCoreState::Sleeping
       ? int(sinf(now * 0.0022f) * 3.0f) : int(sinf(now * 0.0045f) * 1.5f);
-  int y = eyeY + bobY;
+  int y = eyeY + bobY + sleepNodOffsetPx(now);
+  currentIrisColor = moodIrisColor(now);
   renderedLeft = visualExpressionParams(now, reaction, true);
   renderedRight = visualExpressionParams(now, reaction, false);
   hasRenderedEyes = true;
@@ -462,12 +597,12 @@ void renderFrame(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction)
   renderEyeRegion(rightEyeX, y, rightEyeX + 34, renderedRight);
   renderSleepZ(now, coreState);
 }
-void updateBacklight() {
-  if (backlightCurrent == backlightTarget) return;
-  int diff = backlightTarget - backlightCurrent;
-  if (abs(diff) < 2) backlightCurrent = backlightTarget;
-  else backlightCurrent += diff / 4;
-  backlightCurrent = constrain(backlightCurrent, 0, 255);
+void updateBacklight(uint32_t dtMs) {
+  backlightLevel = easeToward(backlightLevel, float(backlightTarget), dtMs, BACKLIGHT_TAU_MS);
+  if (fabsf(backlightLevel - float(backlightTarget)) < 0.5f) backlightLevel = float(backlightTarget);
+  const int level = constrain(int(lroundf(backlightLevel)), 0, 255);
+  if (level == backlightCurrent) return;
+  backlightCurrent = level;
   analogWrite(TFT_BL, backlightCurrent);
 }
 }
@@ -485,6 +620,7 @@ void beginFaceRenderer() {
   drawStaticBackground();
 }
 void scheduleFaceBehavior(uint32_t now) {
+  doubleBlinkQueued = false;
   scheduleNextBlink(now); scheduleNextLook(now); scheduleNextDrowsy(now);
 }
 void startFaceReaction(uint32_t now, FaceExpression expression) {
@@ -494,7 +630,11 @@ void startFaceReaction(uint32_t now, FaceExpression expression) {
   reactionEntryStartedAt = now;
   reactionEntryTransitionActive = true;
   reactionStartedAt = now;
-  reactUntil = now + REACTION_DURATION_MS;
+  reactionDurationMs = static_cast<uint32_t>(lroundf(REACTION_DURATION_MS * moodReactionTempo(faceMood))) +
+                       static_cast<uint32_t>(random(0, REACTION_JITTER_MS + 1));
+  reactionIntensity = moodReactionIntensity(faceMood) *
+      (1.0f + float(random(0, REACTION_INTENSITY_JITTER_PERCENT + 1)) / 100.0f);
+  reactUntil = now + reactionDurationMs;
   if (expression == FaceExpression::SideGlance) sideGlanceRight = !sideGlanceRight;
   if (expression == FaceExpression::Curious) curiousShiftRight = !curiousShiftRight;
   activeExpression = expression;
@@ -505,6 +645,7 @@ void startFaceReaction(uint32_t now, FaceExpression expression) {
   pupilTargetY = 0;
   drowsyUntil = 0;
   settleMoodMoment(now);
+  wakeStretchActive = false;
 }
 bool isFaceReactionFinished(uint32_t now) { return timeReached(now, reactUntil); }
 void finishFaceReaction(uint32_t now) {
@@ -513,10 +654,11 @@ void finishFaceReaction(uint32_t now) {
   reactionEntryTransitionActive = false;
   activeExpression = FaceExpression::Normal;
   settleMoodMoment(now);
+  wakeStretchActive = false;
   // Freeze a relaxed, centered idle destination and discard stale micro-actions.
   blinkActive = false;
   drowsyUntil = now;
-  lidAmount = 0;
+  lidAmount = lidEased = 0;
   pupilX = pupilY = pupilTargetX = pupilTargetY = 0;
   exitToLeft = expressionParams(FaceExpression::Normal, true, now);
   exitToRight = expressionParams(FaceExpression::Normal, false, now);
@@ -524,14 +666,18 @@ void finishFaceReaction(uint32_t now) {
   reactionExitTransitionActive = true;
   // Fresh idle deadlines are scheduled only after the visual exit completes.
 }
-void enterSleepFace(uint32_t) {
+void enterSleepFace(uint32_t now) {
   reactionExitTransitionActive = false;
   reactionEntryTransitionActive = false;
-  backlightTarget = 40;
+  backlightTarget = SLEEP_BACKLIGHT;
   blinkActive = false;
   reactUntil = 0;
   activeExpression = FaceExpression::Normal;
   moodMomentActive = false;
+  wakeStretchActive = false;
+  fallingAsleep = true;
+  fallAsleepStartedAt = now;
+  fallAsleepFromLid = lidAmount;
 }
 void wakeFace(uint32_t now) {
   reactionExitTransitionActive = false;
@@ -541,22 +687,34 @@ void wakeFace(uint32_t now) {
   blinkStart = now;
   blinkDuration = 260;
   activeExpression = FaceExpression::Normal;
-  // The wake blink is the moment; open straight into the current mood.
+  fallingAsleep = false;
+  wakeStretchActive = true;
+  wakeStretchStartedAt = now;
+  // The wake blink and stretch are the moment; open straight into the current mood.
   snapMoodOnNextUpdate = true;
   idleSettledAt = now;
   scheduleFaceBehavior(now);
 }
 void setFaceMood(BuddyMood mood) { faceMood = mood; }
 void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction) {
+  const uint32_t sinceUpdate = static_cast<uint32_t>(now - lastUpdateAt);
+  const uint32_t dt = !hasUpdated || sinceUpdate > MAX_EASE_STEP_MS ? MAX_EASE_STEP_MS : sinceUpdate;
+  hasUpdated = true;
+  lastUpdateAt = now;
+
   if (reactionExitTransitionActive &&
       static_cast<uint32_t>(now - reactionExitStartedAt) >= REACTION_EXIT_TRANSITION_MS) {
     reactionExitTransitionActive = false;
     // exitTo already carries the mood rest pose; ambient motion restarts at zero.
-    lidAmount = 0;
+    lidAmount = lidEased = 0;
     pupilX = pupilTargetX = 0;
     pupilY = pupilTargetY = 0;
     idleSettledAt = now;
     scheduleFaceBehavior(now);
+  }
+  if (reactionEntryTransitionActive &&
+      static_cast<uint32_t>(now - reactionEntryStartedAt) >= REACTION_ENTER_TRANSITION_MS) {
+    reactionEntryTransitionActive = false;
   }
   if (coreState == BuddyCoreState::Sleeping || snapMoodOnNextUpdate) {
     // Closed or just-waking eyes take the mood pose without a moment.
@@ -564,6 +722,13 @@ void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction re
     moodMomentActive = false;
     shownMood = faceMood;
     restPose = moodRestPose(faceMood);
+  }
+  if (wakeStretchActive &&
+      (coreState != BuddyCoreState::Awake ||
+       static_cast<uint32_t>(now - wakeStretchStartedAt) >= WAKE_STRETCH_MS)) {
+    wakeStretchActive = false;
+    idleSettledAt = now;
+    scheduleFaceBehavior(now);
   }
   if (moodMomentActive &&
       static_cast<uint32_t>(now - moodMomentStartedAt) >= moodMomentDuration(momentMood)) {
@@ -575,7 +740,8 @@ void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction re
   }
   // Mood shifts during reactions wait until Buddy has settled back to idle.
   if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
-      !reactionExitTransitionActive && !moodMomentActive && faceMood != shownMood &&
+      !reactionExitTransitionActive && !moodMomentActive && !wakeStretchActive &&
+      faceMood != shownMood &&
       static_cast<uint32_t>(now - idleSettledAt) >= MOOD_MOMENT_DELAY_MS) {
     momentFrom = restPose;
     momentMood = faceMood;
@@ -585,21 +751,22 @@ void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction re
     drowsyUntil = now;
     pupilTargetX = pupilTargetY = 0;
   }
-  if (reactionEntryTransitionActive &&
-      static_cast<uint32_t>(now - reactionEntryStartedAt) >= REACTION_ENTER_TRANSITION_MS) {
-    reactionEntryTransitionActive = false;
-  }
-  if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
-      !reactionExitTransitionActive && !moodMomentActive &&
-      !blinkActive && timeReached(now, nextBlinkAt)) {
+  // Scripted idle moments own the eyes; ambient micro-actions wait for them.
+  const bool idleFree = coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
+      !reactionExitTransitionActive && !moodMomentActive && !wakeStretchActive;
+  if (idleFree && !blinkActive && timeReached(now, nextBlinkAt)) {
     blinkActive = true;
     blinkStart = now;
     blinkDuration = random(140, 220);
-    scheduleNextBlink(now + blinkDuration);
+    if (!doubleBlinkQueued && random(100) >= 100 - DOUBLE_BLINK_PERCENT) {
+      doubleBlinkQueued = true;
+      nextBlinkAt = now + blinkDuration + DOUBLE_BLINK_GAP_MS;
+    } else {
+      doubleBlinkQueued = false;
+      scheduleNextBlink(now + blinkDuration);
+    }
   }
-  if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
-      !reactionExitTransitionActive && !moodMomentActive &&
-      timeReached(now, nextDrowsyAt)) {
+  if (idleFree && timeReached(now, nextDrowsyAt)) {
     drowsyUntil = now + random(1300, 2800);
     scheduleNextDrowsy(now);
   }
@@ -610,31 +777,47 @@ void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction re
     else blinkAmt = sinf(p * 3.1415926f);
   }
   float sleepyAmt = 0.0f;
-  if (coreState == BuddyCoreState::Awake && reaction == BuddyReaction::Idle &&
-      !reactionExitTransitionActive && !moodMomentActive &&
-      !timeReached(now, drowsyUntil))
+  if (idleFree && !timeReached(now, drowsyUntil))
     sleepyAmt = 0.25f + 0.08f * (0.5f + 0.5f * sinf(now * 0.004f));
-  float targetLid = 0.0f;
-  if (coreState == BuddyCoreState::Sleeping) targetLid = 1.0f;
-  else if (reaction == BuddyReaction::Generic) targetLid = 0.0f;
-  else targetLid = max(blinkAmt, sleepyAmt);
-  lidAmount = lerpf(lidAmount, targetLid, 0.22f);
+  if (coreState == BuddyCoreState::Sleeping && fallingAsleep) {
+    const uint32_t elapsed = static_cast<uint32_t>(now - fallAsleepStartedAt);
+    if (elapsed >= FALL_ASLEEP_MS) {
+      fallingAsleep = false;
+      lidEased = 1.0f;
+      sleepBreathStartedAt = now;
+    } else {
+      lidEased = fallAsleepLid(float(elapsed) / FALL_ASLEEP_MS);
+    }
+  } else {
+    float targetLid = 0.0f;
+    if (coreState == BuddyCoreState::Sleeping) targetLid = 1.0f;
+    else if (reaction != BuddyReaction::Generic) targetLid = sleepyAmt;
+    lidEased = easeToward(lidEased, targetLid, dt, LID_EASE_TAU_MS);
+  }
+  lidAmount = max(blinkAmt, lidEased);
+  if (coreState == BuddyCoreState::Sleeping && !fallingAsleep) {
+    // Slow breathing glow while asleep.
+    const float phase = float(static_cast<uint32_t>(now - sleepBreathStartedAt) %
+                              SLEEP_BREATH_PERIOD_MS) / SLEEP_BREATH_PERIOD_MS;
+    backlightTarget = SLEEP_BACKLIGHT +
+        int(lroundf(SLEEP_BREATH_DEPTH * (0.5f - 0.5f * cosf(phase * 6.2831853f))));
+  }
 
   if (reaction == BuddyReaction::Generic) {
     pupilTargetX = 0; pupilTargetY = 0;
   } else if (coreState == BuddyCoreState::Sleeping) {
     pupilTargetX = 0; pupilTargetY = 10;
-  } else if (!reactionExitTransitionActive && !moodMomentActive &&
-             timeReached(now, nextLookAt)) {
+  } else if (idleFree && timeReached(now, nextLookAt)) {
     pupilTargetX = random(-16, 17);
     pupilTargetY = random(-10, 13);
     if (!timeReached(now, drowsyUntil)) pupilTargetY = random(6, 14);
     scheduleNextLook(now);
   }
-  float follow = reaction == BuddyReaction::Generic ? 0.22f : 0.08f;
-  pupilX = lerpf(pupilX, pupilTargetX, follow);
-  pupilY = lerpf(pupilY, pupilTargetY, follow);
-  updateBacklight();
+  const float pupilTau = reaction == BuddyReaction::Generic ? PUPIL_REACTION_TAU_MS
+      : coreState == BuddyCoreState::Sleeping ? PUPIL_SLEEP_TAU_MS : PUPIL_IDLE_TAU_MS;
+  pupilX = easeToward(pupilX, pupilTargetX, dt, pupilTau);
+  pupilY = easeToward(pupilY, pupilTargetY, dt, pupilTau);
+  updateBacklight(dt);
   if (now - lastFrameAt >= 50) {
     lastFrameAt = now;
     renderFrame(now, coreState, reaction);

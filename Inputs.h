@@ -18,6 +18,8 @@ void beginInputs();
 struct InputEvents {
   TouchGesture touch;
   ButtonGesture button;
+  // True while a touch that already reported Hold is still pressed (petting).
+  bool touchHeld;
 };
 
 InputEvents updateInputs(uint32_t now);

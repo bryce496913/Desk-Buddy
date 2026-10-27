@@ -59,6 +59,10 @@ BuddyCoreState getBuddyCoreState();
 BuddyReaction getBuddyReaction();
 BuddyMood getBuddyMood();
 BuddySoundMode getBuddySoundMode();
+// Applies a saved Normal/Quiet preference at boot.
+void restoreBuddySoundMode(BuddySoundMode mode);
+// Reports whether a touch that already became a Hold is still pressed.
+void setBuddyPetting(bool touchHeld, uint32_t now);
 
 #if DESK_BUDDY_DIAGNOSTICS
 struct DiagnosticAutonomousTimingState {

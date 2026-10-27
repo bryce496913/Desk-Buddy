@@ -23,6 +23,14 @@ date or previous formal v1.0.0 release is asserted here.
   Startled settling micro-animation.
 - Mood-tinted idle rest poses between reactions, and short silent mood moments
   (Engaged perk, Grumpy huff, Sleepy heavy blink, Calm sigh) when the mood shifts.
+- Petting: holding past the Hold reaction keeps a contented Petted face with a
+  purr each cycle, gently raising engagement; release plays a ContentBlink.
+- Gentle falling asleep (droop, brief resist, close with a nod), a breathing
+  backlight while asleep, and a wake stretch (eyes wide, look left and right).
+- Mood-based reaction tempo and intensity with small per-reaction jitter.
+- Subtle mood iris tint that glides with mood moments.
+- Occasional double blinks while idle.
+- Quiet Mode is saved to flash and restored after a reboot.
 - Mood-aware weighting of the existing reaction-sound variants.
 - Quiet Mode: visual personality remains active while production reaction chirps
   are suppressed; system cues remain, and mode persists through sleep/wake.
@@ -42,7 +50,10 @@ date or previous formal v1.0.0 release is asserted here.
 - Button input distinguishes ShortPress and LongPress: short sleep/wake,
   long Awake Normal/Quiet toggle, long Sleeping wake without a mode toggle.
 - The sound vocabulary remains 18 variants; their selection is now mood-aware,
-  with immediate-repeat avoidance retained within each family.
+  with immediate-repeat avoidance retained within each family. Petting adds one
+  separate purr sequence outside the variant families.
+- Lid, pupil, and backlight easing is time-based instead of a fixed fraction per
+  loop pass, so motion no longer depends on the main loop rate.
 - Public documentation describes the V2 behavior and production UF2 installation.
 
 ### Preserved

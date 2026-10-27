@@ -21,6 +21,9 @@ constexpr uint8_t ENGAGED_THRESHOLD = 40;
 constexpr uint8_t GRUMPY_THRESHOLD = 60;
 constexpr uint32_t MOOD_DECAY_INTERVAL_MS = 10000;
 constexpr uint32_t SLEEPY_AFTER_INACTIVITY_MS = 90000;
+// Each purr cycle of sustained petting is gentle affection.
+constexpr uint8_t PETTING_ENGAGEMENT = 5;
+constexpr uint8_t PETTING_CALMING = 5;
 
 enum class AutonomousBehavior : uint8_t {
   Curious,
@@ -165,6 +168,8 @@ BuddyMood autonomousScheduleMood = BuddyMood::Calm;
 bool autonomousReactionActive = false;
 AutonomousBehavior lastAutonomousBehavior = AutonomousBehavior::Curious;
 bool hasLastAutonomousBehavior = false;
+bool pettingHeld = false;
+bool pettingActive = false;
 
 void increaseScore(uint8_t &score, uint8_t amount) {
   const uint16_t increased = static_cast<uint16_t>(score) + amount;
@@ -350,6 +355,7 @@ void setSoundMode(BuddySoundMode mode) {
 void startGenericReaction(uint32_t now, FaceExpression expression,
                           ReactionSound sound, BuddyMood reactionMood) {
   stopReactionSound();
+  pettingActive = false;
   activeReaction = BuddyReaction::Generic;
   startFaceReaction(now, expression);
   if (soundMode == BuddySoundMode::Normal) startReactionSound(now, sound, reactionMood);
@@ -405,7 +411,20 @@ void handleHoldInteraction(uint32_t now) {
   startGenericReaction(now, plan.expression, plan.sound, reactionMood);
 }
 
+// Sustained Hold: stay in a contented Petted face, purring once per cycle.
+void startPettingCycle(uint32_t now) {
+  lastMeaningfulActivityAt = now;
+  autonomousReactionActive = false;
+  increaseScore(engagementScore, PETTING_ENGAGEMENT);
+  decreaseScore(irritationScore, PETTING_CALMING);
+  updateMoodState(now);
+  scheduleNextAutonomousBehavior(now);
+  startGenericReaction(now, FaceExpression::Petted, ReactionSound::Purr, currentMood);
+  pettingActive = true;
+}
+
 void enterSleep(uint32_t now) {
+  pettingActive = false;
   clearRecentInteraction();
   lastMoodDecayAt = now;
   lastMeaningfulActivityAt = now;
@@ -427,6 +446,7 @@ void wakeBuddy(uint32_t now) {
   activeReaction = BuddyReaction::Idle;
   resetSoundHistory();
   autonomousReactionActive = false;
+  pettingActive = false;
   wakeFace(now);
   playWakeSound();
   ignoreSoundSensorAfterWake();
@@ -442,6 +462,8 @@ void beginBehaviorEngine(uint32_t now) {
   lastAutonomousBehavior = AutonomousBehavior::Curious;
 #endif
   soundMode = BuddySoundMode::Normal;
+  pettingHeld = false;
+  pettingActive = false;
   clearRecentInteraction();
   coreState = BuddyCoreState::Awake;
   activeReaction = BuddyReaction::Idle;
@@ -462,7 +484,11 @@ void updateBehaviorEngine(uint32_t now) {
   const bool scoresDecayed =
       coreState == BuddyCoreState::Awake && decayMoodScores(now);
 
-  if (activeReaction == BuddyReaction::Generic && isFaceReactionFinished(now)) {
+  if (activeReaction == BuddyReaction::Generic && isFaceReactionFinished(now) &&
+      pettingHeld && coreState == BuddyCoreState::Awake && !autonomousReactionActive) {
+    startPettingCycle(now);
+  } else if (activeReaction == BuddyReaction::Generic && isFaceReactionFinished(now)) {
+    pettingActive = false;
     activeReaction = BuddyReaction::Idle;
     finishFaceReaction(now);
     if (autonomousReactionActive) {
@@ -675,6 +701,7 @@ bool triggerDiagnosticReaction(DiagnosticReaction reaction,
 
   selectedVariantIndex = DIAGNOSTIC_RANDOM_VARIANT;
 
+  pettingActive = false;
   autonomousReactionActive = false;
   disableAutonomousBehavior();
 
@@ -735,3 +762,16 @@ bool triggerDiagnosticReaction(DiagnosticReaction reaction,
 #endif
 
 BuddySoundMode getBuddySoundMode() { return soundMode; }
+
+void restoreBuddySoundMode(BuddySoundMode mode) { setSoundMode(mode); }
+
+void setBuddyPetting(bool touchHeld, uint32_t now) {
+  if (touchHeld == pettingHeld) return;
+  pettingHeld = touchHeld;
+  if (touchHeld || !pettingActive) return;
+  pettingActive = false;
+  // Letting go after petting earns a slow, contented blink.
+  if (coreState == BuddyCoreState::Awake && activeReaction == BuddyReaction::Generic) {
+    startGenericReaction(now, FaceExpression::ContentBlink, ReactionSound::None, currentMood);
+  }
+}

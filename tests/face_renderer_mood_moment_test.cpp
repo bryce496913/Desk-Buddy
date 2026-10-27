@@ -35,8 +35,9 @@ EyeExpressionParams restParams(BuddyMood mood) {
 void reset(uint32_t now, BuddyMood mood) {
   reactionExitTransitionActive = reactionEntryTransitionActive = false;
   moodMomentActive = snapMoodOnNextUpdate = false;
+  wakeStretchActive = fallingAsleep = false;
   hasRenderedEyes = blinkActive = false;
-  lidAmount = 0;
+  lidAmount = lidEased = 0;
   pupilX = pupilY = pupilTargetX = pupilTargetY = 0;
   faceMood = shownMood = momentMood = mood;
   restPose = moodRestPose(mood);

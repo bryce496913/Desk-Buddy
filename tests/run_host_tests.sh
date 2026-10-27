@@ -32,9 +32,18 @@ run_test "production behavior" production_behavior \
   "${REPO_ROOT}/tests/production_behavior_test.cpp" \
   "${REPO_ROOT}/BehaviorEngine.cpp"
 
+run_test "petting behavior" petting_behavior \
+  "${REPO_ROOT}/tests/petting_behavior_test.cpp" \
+  "${REPO_ROOT}/BehaviorEngine.cpp"
+
 run_test "inputs touch gestures" inputs_touch_gestures \
   "${REPO_ROOT}/tests/inputs_touch_gesture_test.cpp" \
   "${REPO_ROOT}/Inputs.cpp"
+
+run_test "Settings persistence" settings \
+  -I"${REPO_ROOT}/tests/settings_stubs" \
+  "${REPO_ROOT}/tests/settings_test.cpp" \
+  "${REPO_ROOT}/Settings.cpp"
 
 run_test "SoundSensor" sound_sensor \
   "${REPO_ROOT}/tests/sound_sensor_test.cpp"
@@ -69,6 +78,11 @@ run_test "FaceRenderer expression micro-motion" face_renderer_expression_motion 
 run_test "FaceRenderer mood rest poses and moments" face_renderer_mood_moment \
   -I"${REPO_ROOT}/tests/renderer_stubs" \
   "${REPO_ROOT}/tests/face_renderer_mood_moment_test.cpp"
+
+run_test "FaceRenderer easing, variation, tint, sleep and wake" face_renderer_polish \
+  -DDESK_BUDDY_TEST_DRAW_TRACE=1 \
+  -I"${REPO_ROOT}/tests/renderer_stubs" \
+  "${REPO_ROOT}/tests/face_renderer_polish_test.cpp"
 
 run_test "FaceRenderer micro-animation lifecycle regression" face_renderer_regression \
   -DDESK_BUDDY_DIAGNOSTICS=1 -DDESK_BUDDY_TEST_DRAW_TRACE=1 \

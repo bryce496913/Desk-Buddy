@@ -40,7 +40,7 @@ Use [docs/V2_PERSONALITY_TUNING.md](docs/V2_PERSONALITY_TUNING.md) to record res
 - [ ] ShortPress sleep/wake and 1000 ms Awake LongPress Quiet toggle work;
       Sleeping LongPress wakes without toggling mode.
 - [ ] Quiet suppresses production chirps while preserving visuals/system cues,
-      survives sleep/wake, and resets to Normal after reboot.
+      survives sleep/wake, and is restored after a reboot or power cycle.
 - [ ] Sleep/Wake presentation and cues work; scores survive sleep without
       catch-up decay, and sound alone does not wake Buddy.
 - [ ] Buzzer audio does not self-trigger VKLSVAN after settling finishes.

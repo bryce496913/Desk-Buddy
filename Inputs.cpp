@@ -41,7 +41,7 @@ void beginInputs() {
 }
 
 InputEvents updateInputs(uint32_t now) {
-  InputEvents events = {TouchGesture::None, ButtonGesture::None};
+  InputEvents events = {TouchGesture::None, ButtonGesture::None, false};
   bool rawTouch = digitalRead(TOUCH_PIN) == HIGH;
   if (rawTouch != touchLastRaw) {
     touchLastRaw = rawTouch;
@@ -72,6 +72,7 @@ InputEvents updateInputs(uint32_t now) {
     events.touch = TouchGesture::Hold;
     touchHoldEmitted = true;
   }
+  events.touchHeld = touchGestureActive && touchStable && touchHoldEmitted;
 
   bool rawButton = digitalRead(BUTTON_PIN) == LOW;
   if (rawButton != buttonLastRaw) {

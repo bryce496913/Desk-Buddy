@@ -10,7 +10,8 @@ enum class ReactionSound : uint8_t {
   Annoyed,
   Startled,
   Suspicious,
-  Confused
+  Confused,
+  Purr
 };
 
 void beginSoundEngine();

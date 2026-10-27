@@ -18,7 +18,8 @@ separate from physical Sleep.
 ## Interaction
 
 Tap escalation is now mood-aware. Hold for 700 ms to give an affectionate/petting
-interaction that increases engagement and reduces irritation. A lightweight
+interaction that increases engagement and reduces irritation. Keep holding to pet
+Buddy: contented eyes and a soft purr, then a slow blink when you let go. A lightweight
 five-second memory of the latest Tap, Hold, or accepted Sound makes connected
 sequences such as Tap → Sound and Sound → Hold feel related.
 
@@ -36,19 +37,25 @@ face. Small procedural motions add Happy bounce, Curious pupil shift, Annoyed
 tightening, Confused asymmetry, and Startled settling, while animated autonomous
 expressions continue moving. The existing display and graphics approach remain.
 
+Between reactions the face rests in a mood pose with a subtle iris tint, and a
+mood change plays a short silent moment. Reactions vary with mood and a little
+randomness, idle blinks sometimes double up, Buddy dozes off with a nod and
+wakes with a stretch, and the backlight breathes while asleep. All idle motion is
+now time-based, so it looks the same regardless of loop speed.
+
 ## Sound
 
 The same **18 reaction variants** remain: six families, three variants each.
 Mood changes which variant is more likely, with immediate-repeat avoidance
 within each family. This release broadens sound selection rather than adding
-a new vocabulary of buzzer sequences.
+a new vocabulary of buzzer sequences. The only new sequence is the petting purr.
 
 ## Quiet Mode
 
 Short button presses control physical sleep/wake. Hold the button for **1000 ms
 while Awake** to toggle Normal/Quiet. Quiet keeps visual reactions and mood
 behavior but suppresses personality chirps; boot and sleep/wake cues remain.
-Quiet survives sleep/wake and returns to Normal after reboot. A long press while
+Quiet survives sleep/wake and is remembered across reboots. A long press while
 Sleeping wakes Buddy without changing sound mode. Environmental sound does not
 wake physically Sleeping Buddy.
 

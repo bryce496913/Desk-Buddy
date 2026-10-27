@@ -135,8 +135,9 @@ These are maximum extra changes relative to the base expression, not new assets.
 **Normal** plays production personality reaction audio. **Quiet** suppresses
 personality reaction audio and stops a current reaction sound when entered;
 visual reactions, mood, scores, interaction memory, and autonomy continue.
-Boot/Sleep/Wake cues remain audible. Mode defaults to Normal on initialization,
-persists through physical sleep/wake, and is not stored across a power cycle.
+Boot/Sleep/Wake cues remain audible. Mode defaults to Normal on first boot,
+persists through physical sleep/wake, and is saved to flash so it survives a
+power cycle (written only when the mode changes).
 Returning to Normal does not replay suppressed audio.
 
 There are **six reaction sound families**, each with **three existing variants**:
@@ -316,6 +317,18 @@ Tap/Hold so input feel is assessed too.
   readable at desk distance without looking like a stuck reaction?
 - Does each mood moment (Engaged perk, Grumpy huff, Sleepy heavy blink, Calm sigh)
   read as the new mood, and does it ever crowd the end of a reaction?
+- Is the mood iris tint noticeable but subtle under real room light?
+- Do idle look-arounds now glide instead of snapping? Is the double blink rare
+  enough to feel natural?
+- Falling asleep: does the droop, brief resist, and nod read as dozing off, and
+  is 1.8 s the right length? Is the sleeping backlight breathing soothing or
+  distracting?
+- Waking: does the stretch (eyes wide, look left and right) feel lively without
+  delaying responsiveness?
+- Petting: hold for several seconds. Do the contented eyes and purr feel warm, is
+  the purr cadence pleasant, and does the release blink land?
+- Reaction variation: across moods, are Engaged reactions noticeably livelier and
+  Sleepy ones softer without either feeling broken?
 
 The goal is **emotion feels immediate; motion feels smooth**, rather than slow
 cinematic animation.
@@ -348,6 +361,7 @@ Evaluate Quiet with production events, not explicit sound auditions:
 - [ ] Personality chirps are suppressed.
 - [ ] Sleep/Wake cues remain appropriate.
 - [ ] Quiet survives physical sleep/wake; returning to Normal resumes future chirps.
+- [ ] Quiet is still active after unplugging and replugging Buddy.
 
 Notes:
 

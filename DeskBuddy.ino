@@ -5,6 +5,7 @@
 #include "Diagnostics.h"
 #include "FaceRenderer.h"
 #include "Inputs.h"
+#include "Settings.h"
 #include "SoundEngine.h"
 #include "SoundSensor.h"
 
@@ -18,6 +19,8 @@ void setup() {
 
   randomSeed(micros());
   beginBehaviorEngine(millis());
+  beginSettings();
+  restoreBuddySoundMode(loadSoundMode());
 
 #if DESK_BUDDY_DIAGNOSTICS
   beginDiagnostics();
@@ -50,6 +53,7 @@ void loop() {
     default:
       break;
   }
+  setBuddyPetting(inputEvents.touchHeld, now);
   switch (inputEvents.button) {
     case ButtonGesture::ShortPress:
       processBuddyEvent(BuddyEvent::ButtonShortPress, now);
@@ -69,4 +73,5 @@ void loop() {
   setFaceMood(getBuddyMood());
   updateFaceRenderer(now, getBuddyCoreState(), getBuddyReaction());
   updateSoundEngine(now, getBuddyReaction());
+  saveSoundModeIfChanged(getBuddySoundMode());
 }
