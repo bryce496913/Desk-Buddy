@@ -299,6 +299,8 @@ natural scheduling; diagnostics deliberately disable it.
 | Reaction exit | | |
 | Reaction replacement | | |
 | Micro-animation within reaction | | |
+| Mood rest pose between reactions | | |
+| Mood moment on mood shift | | |
 
 Use `1`–`6` for entry/exit, then interrupt a reaction with `et` or `eh` for
 replacement. Include partially drowsy/blinking idle → reaction. Repeat using real
@@ -310,6 +312,10 @@ Tap/Hold so input feel is assessed too.
 - Does the face ever flash Normal between reactions?
 - Are transitions so slow that reactions feel delayed?
 - Are transitions so fast that they are barely visible?
+- Force each mood with the mood diagnostics and let Buddy idle: is the rest pose
+  readable at desk distance without looking like a stuck reaction?
+- Does each mood moment (Engaged perk, Grumpy huff, Sleepy heavy blink, Calm sigh)
+  read as the new mood, and does it ever crowd the end of a reaction?
 
 The goal is **emotion feels immediate; motion feels smooth**, rather than slow
 cinematic animation.
