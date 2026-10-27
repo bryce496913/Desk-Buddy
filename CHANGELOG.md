@@ -21,6 +21,8 @@ date or previous formal v1.0.0 release is asserted here.
   from the currently rendered face.
 - Happy bounce, Curious shift, Annoyed tightening, Confused asymmetry, and
   Startled settling micro-animation.
+- Mood-tinted idle rest poses between reactions, and short silent mood moments
+  (Engaged perk, Grumpy huff, Sleepy heavy blink, Calm sigh) when the mood shifts.
 - Mood-aware weighting of the existing reaction-sound variants.
 - Quiet Mode: visual personality remains active while production reaction chirps
   are suppressed; system cues remain, and mode persists through sleep/wake.

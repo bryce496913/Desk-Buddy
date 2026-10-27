@@ -158,6 +158,18 @@ Annoyed tightening, Confused asymmetry, and Startled settling. SleepyDrift and
 ExcitedScanning remain animated. Rendering reuses the fixed eye/effect canvases;
 no new graphics or asset sheets are required.
 
+Between reactions, the idle face carries a **mood rest pose**: Calm is the
+neutral V2 face, Engaged looks up with slightly larger irises and lifted lower
+lids, Grumpy rests with lowered upper lids, and Sleepy rests heavy-lidded with a
+downward gaze. Blinks, drowsiness, and look-arounds play on top of that pose.
+
+When the mood changes, Buddy plays a short silent **mood moment** while gliding to
+the new rest pose: Engaged perks up, Grumpy huffs with an asymmetric squint, Sleepy
+takes a slow heavy blink (1300 ms), and Calm lets out a soft sigh (others 900 ms).
+Moments wait until any reaction has finished its exit and the face has rested for
+400 ms; a new reaction interrupts a moment cleanly and the moment replays later.
+Sleep and wake adopt the current mood without a moment.
+
 ### Mood-aware sounds
 
 There are **18 existing reaction variants: six families × three variants**.

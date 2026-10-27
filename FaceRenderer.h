@@ -27,4 +27,6 @@ bool isFaceReactionFinished(uint32_t now);
 void finishFaceReaction(uint32_t now);
 void enterSleepFace(uint32_t now);
 void wakeFace(uint32_t now);
+// Mood tints the idle resting face; a change plays a short transition moment.
+void setFaceMood(BuddyMood mood);
 void updateFaceRenderer(uint32_t now, BuddyCoreState coreState, BuddyReaction reaction);

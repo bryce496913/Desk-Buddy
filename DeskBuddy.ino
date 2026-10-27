@@ -66,6 +66,7 @@ void loop() {
 #endif
 
   updateBehaviorEngine(now);
+  setFaceMood(getBuddyMood());
   updateFaceRenderer(now, getBuddyCoreState(), getBuddyReaction());
   updateSoundEngine(now, getBuddyReaction());
 }
